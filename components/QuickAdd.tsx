@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { parseQuickAdd, type ParseToken } from "@/lib/parse/quickAdd";
 import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, type Thread } from "@/lib/threads";
@@ -24,9 +24,34 @@ const FIELD_TYPE =
   "font-[family-name:var(--font-mono)] text-base leading-6 tracking-[-0.01em]";
 const FIELD_BOX = "px-3 py-3";
 
-export function QuickAdd({ threads, onSubmit }: Props) {
+export interface QuickAddHandle {
+  /** Drop text into the field and put the cursor after it. */
+  prefill: (text: string) => void;
+}
+
+export const QuickAdd = forwardRef<QuickAddHandle, Props>(function QuickAdd(
+  { threads, onSubmit },
+  ref,
+) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Exposed imperatively rather than as a prop: tapping an open stretch fills
+  // the field and focuses it, which is an event, not a piece of state. Passing
+  // it down as a value would need an effect to detect the change and would
+  // re-fire whenever the parent re-rendered.
+  useImperativeHandle(ref, () => ({
+    prefill(text: string) {
+      setValue(text);
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      // After React has painted the new value, park the caret at the end.
+      requestAnimationFrame(() => {
+        el.setSelectionRange(text.length, text.length);
+      });
+    },
+  }));
 
   const { parsed, tokens } = useMemo(() => parseQuickAdd(value), [value]);
 
@@ -155,4 +180,4 @@ export function QuickAdd({ threads, onSubmit }: Props) {
       )}
     </form>
   );
-}
+});

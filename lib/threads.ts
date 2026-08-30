@@ -3,6 +3,8 @@ export interface Thread {
   name: string;
   /** 0–7, indexing the thread palette in styles/tokens.css. */
   colorIndex: number;
+  /** Minutes a week this goal is meant to get. Null means no commitment. */
+  weeklyTargetMin?: number | null;
 }
 
 export const THREAD_COLOR_COUNT = 8;

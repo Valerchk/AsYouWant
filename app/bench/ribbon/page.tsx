@@ -237,6 +237,13 @@ export default function RibbonBench() {
         dayEndMin={DAY_END}
         onToggleDone={toggleDone}
         onOpenBlock={() => {}}
+        onMoveBlock={(id, startMin) =>
+          setBlocks((prev) =>
+            prev.map((b) =>
+              b.id === id ? { ...b, kind: "anchor", startMin } : b,
+            ),
+          )
+        }
         onFillGap={fillGap}
         onPushToTomorrow={(id) => setStatus(id, "carried")}
         onDrop={(id) => setStatus(id, "dropped")}

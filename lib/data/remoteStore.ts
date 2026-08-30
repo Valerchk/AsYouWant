@@ -4,7 +4,15 @@ import { dateInZone } from "@/lib/time";
 import { THREAD_COLOR_COUNT } from "@/lib/threads";
 import type { Block } from "@/lib/timeline/engine";
 import type { Database } from "@/lib/supabase/types";
-import type { DayData, DayStore, NewBlock, NoteData, NoteStore } from "./types";
+import type {
+  DayData,
+  DayStore,
+  DayTemplate,
+  NewBlock,
+  NoteData,
+  NoteStore,
+  TemplateBlock,
+} from "./types";
 
 type BlockUpdate = Database["public"]["Tables"]["blocks"]["Update"];
 
@@ -169,9 +177,16 @@ export function createRemoteDayStore(): DayStore {
 
     async patchThread(id, patch) {
       const supabase = createClient();
-      const row: { name?: string; color_index?: number } = {};
+      const row: {
+        name?: string;
+        color_index?: number;
+        weekly_target_min?: number | null;
+      } = {};
       if (patch.name !== undefined) row.name = patch.name;
       if (patch.colorIndex !== undefined) row.color_index = patch.colorIndex;
+      if (patch.weeklyTargetMin !== undefined) {
+        row.weekly_target_min = patch.weeklyTargetMin;
+      }
 
       const { error } = await supabase.from("threads").update(row).eq("id", id);
       if (error) throw new Error(error.message);
@@ -181,6 +196,88 @@ export function createRemoteDayStore(): DayStore {
       const supabase = createClient();
       const { error } = await supabase.from("blocks").delete().eq("id", id);
       if (error) throw new Error(error.message);
+    },
+
+    async archiveThread(id) {
+      const supabase = createClient();
+      // Archived rather than deleted: blocks reference it, and a finished day
+      // should keep saying which goal it fed.
+      const { error } = await supabase
+        .from("threads")
+        .update({ archived_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+
+    async listTemplates(): Promise<DayTemplate[]> {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("day_templates")
+        .select("*")
+        .eq("user_id", userId)
+        .order("name");
+
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        blocks: Array.isArray(row.payload)
+          ? (row.payload as TemplateBlock[])
+          : [],
+      }));
+    },
+
+    async saveTemplate(name, blocks): Promise<DayTemplate> {
+      const supabase = createClient();
+      // (user_id, name) is unique in the schema, so saving the same name
+      // twice updates rather than failing.
+      const { data, error } = await supabase
+        .from("day_templates")
+        .upsert(
+          { user_id: userId, name, payload: blocks },
+          { onConflict: "user_id,name" },
+        )
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return { id: data.id, name: data.name, blocks };
+    },
+
+    async deleteTemplate(id) {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("day_templates")
+        .delete()
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+
+    async loadWeek() {
+      const supabase = createClient();
+      const from = new Date();
+      from.setDate(from.getDate() - 6);
+      const fromDay = from.toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("blocks")
+        .select("thread_id, planned_min, actual_start_min, actual_end_min, status")
+        .eq("user_id", userId)
+        .gte("day", fromDay);
+
+      if (error) throw new Error(error.message);
+
+      const totals = new Map<string, number>();
+      for (const row of data ?? []) {
+        if (!row.thread_id || row.status !== "done") continue;
+        // What it actually took, falling back to what was planned.
+        const spent =
+          row.actual_end_min !== null && row.actual_start_min !== null
+            ? row.actual_end_min - row.actual_start_min
+            : row.planned_min;
+        totals.set(row.thread_id, (totals.get(row.thread_id) ?? 0) + spent);
+      }
+      return totals;
     },
   };
 }

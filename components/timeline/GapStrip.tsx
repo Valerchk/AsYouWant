@@ -8,12 +8,20 @@ import { CLOCK_W, RAIL_W, RIBBON_SPRING } from "./motion";
 
 interface Props {
   segment: GapSegment;
-  onFill: (startMin: number, endMin: number) => void;
+  nowMin: number;
+  onFill: (startMin: number, minutes: number) => void;
 }
 
-export function GapStrip({ segment, onFill }: Props) {
+export function GapStrip({ segment, nowMin, onFill }: Props) {
   const { startMin, endMin, top, height, collapsed } = segment;
-  const minutes = endMin - startMin;
+
+  // Only the part still ahead counts as open. Measuring the whole span meant a
+  // gap could advertise "14h open 08:00–22:00" at six in the evening, and
+  // disagree with the "free" figure in the header, which has always counted
+  // from now.
+  const openFrom = Math.max(startMin, nowMin);
+  const openMin = Math.max(0, endMin - openFrom);
+  const spent = openMin === 0;
 
   // Short breathing room is drawn to scale and left alone — labelling every
   // ten-minute crack would turn the ribbon into a nag.
@@ -52,22 +60,35 @@ export function GapStrip({ segment, onFill }: Props) {
         }}
       />
 
-      <button
-        type="button"
-        onClick={() => onFill(startMin, endMin)}
-        className="group absolute inset-y-0 flex items-center gap-2 text-fine text-faint transition-colors hover:text-accent"
-        style={{ left: CLOCK_W + RAIL_W }}
-      >
-        <Icon
-          name="plus"
-          size={13}
-          className="opacity-0 transition-opacity group-hover:opacity-100"
-        />
-        <span className="num">{formatDuration(minutes)} open</span>
-        <span className="num text-micro opacity-60">
-          {formatClock(startMin)}–{formatClock(endMin)}
-        </span>
-      </button>
+      {spent ? (
+        // Time that has already gone. Stated, not offered.
+        <div
+          className="absolute inset-y-0 flex items-center gap-2 text-micro text-faint opacity-60"
+          style={{ left: CLOCK_W + RAIL_W }}
+        >
+          <span className="num">
+            {formatClock(startMin)}–{formatClock(endMin)}
+          </span>
+          <span>unplanned</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onFill(openFrom, openMin)}
+          className="group absolute inset-y-0 flex items-center gap-2 text-fine text-faint transition-colors hover:text-accent"
+          style={{ left: CLOCK_W + RAIL_W }}
+        >
+          <Icon
+            name="plus"
+            size={13}
+            className="opacity-0 transition-opacity group-hover:opacity-100"
+          />
+          <span className="num">{formatDuration(openMin)} open</span>
+          <span className="num text-micro opacity-60">
+            {formatClock(openFrom)}–{formatClock(endMin)}
+          </span>
+        </button>
+      )}
     </motion.div>
   );
 }

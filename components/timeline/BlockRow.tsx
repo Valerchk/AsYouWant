@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { BlockSegment } from "@/lib/timeline/geometry";
 import { formatClock, formatDuration } from "@/lib/time";
@@ -14,6 +15,10 @@ interface Props {
   slackMin: number;
   onToggleDone: (blockId: string) => void;
   onOpen: (blockId: string) => void;
+  /** Pixel offset → the minute it lands on. Non-linear, so it comes from
+      geometry rather than from dividing by a scale factor. */
+  minuteAt: (offsetY: number) => number;
+  onMove: (blockId: string, startMin: number) => void;
 }
 
 export function BlockRow({
@@ -22,10 +27,20 @@ export function BlockRow({
   slackMin,
   onToggleDone,
   onOpen,
+  minuteAt,
+  onMove,
 }: Props) {
   const { placed, top, height } = segment;
   const { block, isRunning, isMissed, overrunMin } = placed;
   const done = block.status === "done";
+
+  // Finished and running blocks are history: dragging them would rewrite what
+  // already happened. Only what is still planned can be moved.
+  const draggable = block.status === "planned";
+  const [dragMin, setDragMin] = useState<number | null>(null);
+  // Motion fires a click after a drag; without this, letting go of a block
+  // would also open its editor.
+  const moved = useRef(false);
 
   const colour = thread ? threadColor(thread.colorIndex) : "var(--color-rule)";
   const accent = isRunning
@@ -41,9 +56,29 @@ export function BlockRow({
       // run stacked every segment at one point, and the overlapping hit areas
       // swallowed taps. Layout must never depend on animation.
       layout
-      className="absolute inset-x-0 z-10"
+      className={`absolute inset-x-0 ${dragMin !== null ? "z-30" : "z-10"}`}
       style={{ top, height }}
       transition={RIBBON_SPRING}
+      drag={draggable ? "y" : false}
+      dragDirectionLock
+      dragMomentum={false}
+      dragElastic={0.08}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      onDragStart={() => {
+        moved.current = true;
+      }}
+      onDrag={(_, info) => setDragMin(minuteAt(info.offset.y))}
+      onDragEnd={(_, info) => {
+        // Snap to five minutes: nobody means 10:37 when they drop a block.
+        const raw = minuteAt(info.offset.y);
+        onMove(block.id, Math.round(raw / 5) * 5);
+        setDragMin(null);
+        // Let the click that follows the release pass by before re-arming.
+        setTimeout(() => {
+          moved.current = false;
+        }, 0);
+      }}
+      whileDrag={{ scale: 1.01 }}
     >
       {/* A hairline above every block. On paper, blocks with no separation
           read as one undifferentiated column. */}
@@ -62,10 +97,20 @@ export function BlockRow({
         <div className="num pt-3 pr-2.5 text-right text-micro leading-5">
           <span
             className={
-              isRunning ? "text-accent" : done ? "text-faint" : "text-ink"
+              dragMin !== null
+                ? "font-medium text-accent"
+                : isRunning
+                  ? "text-accent"
+                  : done
+                    ? "text-faint"
+                    : "text-ink"
             }
           >
-            {formatClock(placed.startMin)}
+            {formatClock(
+              dragMin !== null
+                ? Math.round(dragMin / 5) * 5
+                : placed.startMin,
+            )}
           </span>
         </div>
 
@@ -119,7 +164,9 @@ export function BlockRow({
             closing a block never accidentally opens its editor. */}
         <button
           type="button"
-          onClick={() => onOpen(block.id)}
+          onClick={() => {
+            if (!moved.current) onOpen(block.id);
+          }}
           className="min-w-0 pt-3 pr-2 text-left"
         >
           <div

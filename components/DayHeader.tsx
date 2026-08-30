@@ -12,6 +12,7 @@ interface Props {
   overflowCount: number;
   confirmed: boolean;
   onConfirm: () => void;
+  onOpenTemplates: () => void;
 }
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -47,6 +48,7 @@ export function DayHeader({
   overflowCount,
   confirmed,
   onConfirm,
+  onOpenTemplates,
 }: Props) {
   const now = new Date();
   const stamp = `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
@@ -65,7 +67,16 @@ export function DayHeader({
           </div>
           <h1 className="display mt-1.5 text-title text-deep">Today</h1>
         </div>
-        <div className="-mr-2">
+        <div className="-mr-2 flex items-center">
+          <button
+            type="button"
+            onClick={onOpenTemplates}
+            aria-label="Day templates"
+            title="Day templates"
+            className="flex h-9 w-9 items-center justify-center rounded-edge text-faint transition-colors hover:bg-sunk hover:text-ink"
+          >
+            <Icon name="template" size={17} />
+          </button>
           <ThemeToggle />
         </div>
       </div>

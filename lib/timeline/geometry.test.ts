@@ -6,6 +6,7 @@ import {
   MIN_BLOCK_H,
   COLLAPSED_GAP_H,
   PX_PER_MIN,
+  minuteForY,
   type Segment,
 } from "./geometry";
 
@@ -227,5 +228,133 @@ describe("yForMinute", () => {
 
     expect(y).toBeGreaterThanOrEqual(gap.top);
     expect(y).toBeLessThanOrEqual(gap.top + gap.height);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("folding the past", () => {
+  const withPast = (blocks: Block[], nowMin: number) =>
+    buildGeometry(
+      layout(blocks, { nowMin, dayStartMin: H(8), dayEndMin: H(22) }),
+      H(8),
+      H(22),
+      { nowMin, collapsePast: true },
+    );
+
+  it("replaces the finished run with one row", () => {
+    // Two blocks done in the morning, opened at 18:00.
+    const morning = [
+      block({
+        plannedMin: 60,
+        status: "done",
+        actualStartMin: H(9),
+        actualEndMin: H(10),
+      }),
+      block({
+        plannedMin: 60,
+        status: "done",
+        actualStartMin: H(10),
+        actualEndMin: H(11),
+      }),
+      anchor(H(19), 60),
+    ];
+
+    const geo = withPast(morning, H(18));
+    const past = geo.segments.find((s) => s.type === "past");
+
+    expect(past).toBeDefined();
+    expect(past!.type === "past" && past!.doneCount).toBe(2);
+    // The two blocks and the gaps around them are now one short strip.
+    expect(geo.segments.filter((s) => s.type === "block")).toHaveLength(1);
+  });
+
+  it("keeps segments contiguous after folding", () => {
+    const geo = withPast(
+      [
+        block({
+          plannedMin: 60,
+          status: "done",
+          actualStartMin: H(9),
+          actualEndMin: H(10),
+        }),
+        anchor(H(19), 60),
+      ],
+      H(18),
+    );
+
+    let expectedTop = 0;
+    for (const s of geo.segments) {
+      expect(s.top).toBe(expectedTop);
+      expectedTop += s.height;
+    }
+    expect(geo.totalHeight).toBe(expectedTop);
+  });
+
+  it("leaves a morning alone when nothing has finished yet", () => {
+    const geo = withPast([anchor(H(10), 60)], H(9));
+    expect(geo.segments.some((s) => s.type === "past")).toBe(false);
+  });
+
+  it("does not fold when folding would not save room", () => {
+    // A single short gap is already smaller than the strip that would replace it.
+    const geo = withPast([anchor(H(8), 10)], H(8, 12));
+    expect(geo.segments.some((s) => s.type === "past")).toBe(false);
+  });
+
+  it("is off unless asked for", () => {
+    const blocks = [
+      block({
+        plannedMin: 60,
+        status: "done",
+        actualStartMin: H(9),
+        actualEndMin: H(10),
+      }),
+      anchor(H(19), 60),
+    ];
+    const geo = buildGeometry(
+      layout(blocks, { nowMin: H(18), dayStartMin: H(8), dayEndMin: H(22) }),
+      H(8),
+      H(22),
+    );
+    expect(geo.segments.some((s) => s.type === "past")).toBe(false);
+  });
+});
+
+describe("minuteForY", () => {
+  it("is the exact inverse of yForMinute across the whole day", () => {
+    // The property dragging depends on: drop a block at a pixel, get back the
+    // minute that pixel stands for. Collapsed stretches make this non-linear,
+    // so it cannot be checked by dividing by PX_PER_MIN.
+    const geo = geoOf([anchor(H(9), 60), anchor(H(14), 30), anchor(H(19), 90)]);
+
+    for (let m = H(8); m <= H(22); m += 7) {
+      const round = minuteForY(geo, yForMinute(geo, m));
+      expect(Math.abs(round - m)).toBeLessThan(0.5);
+    }
+  });
+
+  it("survives the round trip with the past folded", () => {
+    const geo = buildGeometry(
+      layout([anchor(H(9), 60), anchor(H(19), 60)], {
+        nowMin: H(18),
+        dayStartMin: H(8),
+        dayEndMin: H(22),
+      }),
+      H(8),
+      H(22),
+      { nowMin: H(18), collapsePast: true },
+    );
+
+    for (let m = H(18); m <= H(22); m += 5) {
+      const round = minuteForY(geo, yForMinute(geo, m));
+      expect(Math.abs(round - m)).toBeLessThan(0.5);
+    }
+  });
+
+  it("clamps outside the ribbon", () => {
+    const geo = geoOf([anchor(H(10), 60)]);
+    expect(minuteForY(geo, -50)).toBe(geo.startMin);
+    expect(minuteForY(geo, geo.totalHeight + 999)).toBe(geo.endMin);
   });
 });

@@ -12,7 +12,13 @@ import {
   makeNote,
   saveNotes,
 } from "@/lib/store/notes";
-import type { DayData, DayStore, NewBlock, NoteStore } from "./types";
+import type {
+  DayData,
+  DayStore,
+  DayTemplate,
+  NewBlock,
+  NoteStore,
+} from "./types";
 
 /* Browser-storage implementation. Used until Supabase is configured, so the
    app is usable — and judgeable — before there is a database.
@@ -30,6 +36,28 @@ function toDayData(state: DayState, nowMin: number): DayData {
     dayStartMin: bounds.start,
     dayEndMin: bounds.end,
   };
+}
+
+const TEMPLATE_KEY = "ayw.templates.v1";
+
+function readTemplates(): DayTemplate[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as DayTemplate[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTemplates(list: DayTemplate[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+  } catch {
+    /* private mode or full quota; losing persistence is survivable */
+  }
 }
 
 export function createLocalDayStore(): DayStore {
@@ -97,6 +125,52 @@ export function createLocalDayStore(): DayStore {
     async deleteBlock(id) {
       const state = current ?? loadDay(at);
       persist({ ...state, blocks: state.blocks.filter((b) => b.id !== id) });
+    },
+
+    async archiveThread(id) {
+      const state = current ?? loadDay(at);
+      persist({
+        ...state,
+        threads: state.threads.filter((t) => t.id !== id),
+        // Blocks keep their history; they simply lose the thread.
+        blocks: state.blocks.map((b) =>
+          b.threadId === id ? { ...b, threadId: null } : b,
+        ),
+      });
+    },
+
+    async listTemplates() {
+      return readTemplates();
+    },
+
+    async saveTemplate(name, blocks) {
+      const template: DayTemplate = { id: newId(), name, blocks };
+      // Saving under an existing name replaces it rather than making a twin.
+      const rest = readTemplates().filter(
+        (t) => t.name.toLowerCase() !== name.toLowerCase(),
+      );
+      writeTemplates([...rest, template]);
+      return template;
+    },
+
+    async deleteTemplate(id) {
+      writeTemplates(readTemplates().filter((t) => t.id !== id));
+    },
+
+    async loadWeek() {
+      // Browser storage only ever holds today, so the week is today. The
+      // Supabase store answers this properly.
+      const state = current ?? loadDay(at);
+      const totals = new Map<string, number>();
+      for (const b of state.blocks) {
+        if (!b.threadId || b.status !== "done") continue;
+        const spent =
+          b.actualEndMin !== null && b.actualStartMin !== null
+            ? b.actualEndMin - b.actualStartMin
+            : b.plannedMin;
+        totals.set(b.threadId, (totals.get(b.threadId) ?? 0) + spent);
+      }
+      return totals;
     },
   };
 }

@@ -15,10 +15,15 @@ export interface UseDay {
   loading: boolean;
   error: string | null;
   addBlock: (block: NewBlock) => void;
+  /** Lay a whole template down in one go. */
+  addBlocks: (blocks: NewBlock[]) => void;
   patchBlock: (id: string, patch: Partial<Block>) => void;
   confirmDay: () => void;
   deleteBlock: (id: string) => void;
   patchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
+  archiveThread: (id: string) => void;
+  /** Create a goal on its own, from the goals screen. */
+  addThreadNamed: (name: string) => void;
   /**
    * Add a block, creating its goal first if the #tag names one that does not
    * exist yet. Without this, a fresh account — which has no threads at all —
@@ -54,6 +59,24 @@ export function useDay(nowMin: number): UseDay {
       .addBlock(block)
       .then((created) => {
         setDay((d) => (d ? { ...d, blocks: [...d.blocks, created] } : d));
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
+  const addBlocks = useCallback((blocks: NewBlock[]) => {
+    const store = dayStore();
+    // Sequential rather than parallel: each insert takes the next sort order,
+    // and the remote store counts them as it goes.
+    blocks
+      .reduce<Promise<Block[]>>(
+        (chain, b) =>
+          chain.then(async (acc) => [...acc, await store.addBlock(b)]),
+        Promise.resolve([]),
+      )
+      .then((created) => {
+        setDay((d) => (d ? { ...d, blocks: [...d.blocks, ...created] } : d));
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : String(e));
@@ -110,6 +133,37 @@ export function useDay(nowMin: number): UseDay {
     [],
   );
 
+  const archiveThread = useCallback((id: string) => {
+    setDay((d) =>
+      d
+        ? {
+            ...d,
+            threads: d.threads.filter((t) => t.id !== id),
+            // Blocks keep their history; they just lose the thread.
+            blocks: d.blocks.map((b) =>
+              b.threadId === id ? { ...b, threadId: null } : b,
+            ),
+          }
+        : d,
+    );
+    dayStore()
+      .archiveThread(id)
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
+  const addThreadNamed = useCallback((name: string) => {
+    dayStore()
+      .addThread(name)
+      .then((thread) => {
+        setDay((d) => (d ? { ...d, threads: [...d.threads, thread] } : d));
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
   const confirmDay = useCallback(() => {
     setDay((d) => (d ? { ...d, confirmed: true } : d));
     dayStore()
@@ -159,10 +213,13 @@ export function useDay(nowMin: number): UseDay {
     loading: day === null && error === null,
     error,
     addBlock,
+    addBlocks,
     patchBlock,
     confirmDay,
     deleteBlock,
     patchThread,
+    archiveThread,
+    addThreadNamed,
     addBlockWithThread,
   };
 }

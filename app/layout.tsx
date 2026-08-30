@@ -34,10 +34,16 @@ export const metadata: Metadata = {
     // iOS painting a slab of its own behind it.
     statusBarStyle: "black-translucent",
   },
-  // iOS ignores the manifest's icons for the Home Screen and reads this.
+  // iOS ignores the manifest's icons for the Home Screen and reads `apple`.
+  // The two small sizes exist because the full mark is illegible in a browser
+  // tab — the favicon keeps only the rail and one block.
   icons: {
     apple: "/icons/apple-touch-icon.png",
-    icon: "/icons/icon-192.png",
+    icon: [
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
   },
 };
 

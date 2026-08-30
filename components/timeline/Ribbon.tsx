@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { layout, type Block } from "@/lib/timeline/engine";
-import { buildGeometry, yForMinute } from "@/lib/timeline/geometry";
+import { buildGeometry, minuteForY, yForMinute } from "@/lib/timeline/geometry";
 import { threadById, type Thread } from "@/lib/threads";
 import { BlockRow } from "./BlockRow";
 import { GapStrip } from "./GapStrip";
+import { PastStrip } from "./PastStrip";
 import { NowLine } from "./NowLine";
 import { OverflowTray } from "./OverflowTray";
 import { CLOCK_W, RAIL_W } from "./motion";
@@ -18,9 +19,12 @@ interface Props {
   dayEndMin: number;
   onToggleDone: (blockId: string) => void;
   onOpenBlock: (blockId: string) => void;
-  onFillGap: (startMin: number, endMin: number) => void;
+  /** A stretch of open time was tapped: start a block of this length here. */
+  onFillGap: (startMin: number, minutes: number) => void;
   onPushToTomorrow: (blockId: string) => void;
   onDrop: (blockId: string) => void;
+  /** A block was dragged to a new time. */
+  onMoveBlock: (blockId: string, startMin: number) => void;
 }
 
 export function Ribbon({
@@ -34,15 +38,24 @@ export function Ribbon({
   onFillGap,
   onPushToTomorrow,
   onDrop,
+  onMoveBlock,
 }: Props) {
+  // The past is folded by default and expands on demand. Kept here rather than
+  // in geometry so the geometry stays a pure function of the day.
+  const [showPast, setShowPast] = useState(false);
+
   const result = useMemo(
     () => layout(blocks, { nowMin, dayStartMin, dayEndMin }),
     [blocks, nowMin, dayStartMin, dayEndMin],
   );
 
   const geo = useMemo(
-    () => buildGeometry(result, dayStartMin, dayEndMin),
-    [result, dayStartMin, dayEndMin],
+    () =>
+      buildGeometry(result, dayStartMin, dayEndMin, {
+        nowMin,
+        collapsePast: !showPast,
+      }),
+    [result, dayStartMin, dayEndMin, nowMin, showPast],
   );
 
   // Slack belongs to the block that released it, so it travels with the block
@@ -53,7 +66,8 @@ export function Ribbon({
   );
 
   const nowY = yForMinute(geo, nowMin);
-  const empty = result.placed.length === 0 && result.overflow.length === 0;
+  const nothingPlanned =
+    result.placed.length === 0 && result.overflow.length === 0;
 
   return (
     <div>
@@ -71,30 +85,62 @@ export function Ribbon({
           <NowLine y={nowY} />
         )}
 
-        {geo.segments.map((seg) =>
-          seg.type === "block" ? (
-            <BlockRow
+        {geo.segments.map((seg) => {
+          if (seg.type === "block") {
+            return (
+              <BlockRow
+                key={seg.key}
+                segment={seg}
+                thread={threadById(threads, seg.placed.block.threadId)}
+                slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
+                onToggleDone={onToggleDone}
+                onOpen={onOpenBlock}
+                minuteAt={(offsetY) => minuteForY(geo, seg.top + offsetY)}
+                onMove={onMoveBlock}
+              />
+            );
+          }
+          if (seg.type === "past") {
+            return (
+              <PastStrip
+                key={seg.key}
+                segment={seg}
+                onExpand={() => setShowPast(true)}
+              />
+            );
+          }
+          return (
+            <GapStrip
               key={seg.key}
               segment={seg}
-              thread={threadById(threads, seg.placed.block.threadId)}
-              slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
-              onToggleDone={onToggleDone}
-              onOpen={onOpenBlock}
+              nowMin={nowMin}
+              onFill={onFillGap}
             />
-          ) : (
-            <GapStrip key={seg.key} segment={seg} onFill={onFillGap} />
-          ),
-        )}
-
-        {empty && (
-          <div
-            className="absolute text-fine text-faint"
-            style={{ left: CLOCK_W + RAIL_W, top: 12 }}
-          >
-            Nothing planned yet. Add a block below.
-          </div>
-        )}
+          );
+        })}
       </div>
+
+      {/* Sits below the ribbon rather than floating on top of it — the earlier
+          version was absolutely positioned and landed on the gap's own label. */}
+      {nothingPlanned && (
+        <p
+          className="mt-4 text-fine text-faint"
+          style={{ marginLeft: CLOCK_W + RAIL_W }}
+        >
+          Nothing planned yet. Add a block below, or tap any open stretch.
+        </p>
+      )}
+
+      {showPast && (
+        <button
+          type="button"
+          onClick={() => setShowPast(false)}
+          className="mt-4 text-micro text-faint transition-colors hover:text-ink"
+          style={{ marginLeft: CLOCK_W + RAIL_W }}
+        >
+          Fold earlier today away
+        </button>
+      )}
 
       <OverflowTray
         blocks={result.overflow}

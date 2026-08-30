@@ -28,5 +28,6 @@ export function toThread(row: ThreadRow): Thread {
     id: row.id,
     name: row.name,
     colorIndex: row.color_index,
+    weeklyTargetMin: row.weekly_target_min,
   };
 }

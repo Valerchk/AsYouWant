@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Ribbon } from "@/components/timeline/Ribbon";
-import { QuickAdd } from "@/components/QuickAdd";
+import { QuickAdd, type QuickAddHandle } from "@/components/QuickAdd";
 import { DayHeader } from "@/components/DayHeader";
 import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
+import { TemplateSheet } from "@/components/TemplateSheet";
 import { LoadFailure } from "@/components/LoadFailure";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
+import { formatClock, formatDuration } from "@/lib/time";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { useDay } from "@/lib/data/useDay";
 
@@ -33,15 +35,16 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     day,
     loading,
     error,
-    addBlock,
     addBlockWithThread,
+    addBlocks,
     patchBlock,
     deleteBlock,
     patchThread,
     confirmDay,
   } = useDay(nowMin);
-  const scrolled = useRef(false);
+  const quickAdd = useRef<QuickAddHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const result = useMemo(
     () =>
@@ -52,15 +55,6 @@ function DayScreen({ nowMin }: { nowMin: number }) {
       }),
     [day?.blocks, day?.dayStartMin, day?.dayEndMin, nowMin],
   );
-
-  // Open on the current moment rather than at the top of the morning.
-  useEffect(() => {
-    if (!day || scrolled.current) return;
-    scrolled.current = true;
-    document
-      .getElementById("now-anchor")
-      ?.scrollIntoView({ block: "center", behavior: "instant" });
-  }, [day]);
 
   function handleAdd(input: string) {
     const { parsed } = parseQuickAdd(input);
@@ -100,17 +94,25 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     patchBlock(blockId, { status, actualStartMin, actualEndMin });
   }
 
-  function fillGap(startMin: number) {
-    addBlock({
-      title: "New block",
+  /* Tapping open time fills the input instead of creating a block. Silently
+     minting an untitled "New block" is how three identical rows ended up on
+     the ribbon — and it put them wherever the gap started, which could be
+     hours in the past. */
+  /* Dragging a block to a time is a statement that it belongs there, so it
+     becomes anchored. A flow block that kept flowing after being placed would
+     just spring back, which reads as the app refusing the gesture. */
+  function moveBlock(blockId: string, startMin: number) {
+    patchBlock(blockId, {
       kind: "anchor",
-      startMin,
-      plannedMin: 30,
-      status: "planned",
-      threadId: null,
-      actualStartMin: null,
-      actualEndMin: null,
+      startMin: Math.max(0, Math.min(1439, startMin)),
     });
+  }
+
+  function fillGap(startMin: number, minutes: number) {
+    const length = Math.min(minutes, 120);
+    quickAdd.current?.prefill(
+      `${formatClock(startMin)} ${formatDuration(length)} `,
+    );
   }
 
   if (error) return <LoadFailure what="your day" message={error} />;
@@ -143,6 +145,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           overflowCount={result.overflow.length}
           confirmed={day.confirmed}
           onConfirm={confirmDay}
+          onOpenTemplates={() => setTemplatesOpen(true)}
         />
 
         <div className="mt-7 px-6">
@@ -159,6 +162,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             onToggleDone={toggleDone}
             onOpenBlock={setEditingId}
             onFillGap={fillGap}
+            onMoveBlock={moveBlock}
             onPushToTomorrow={(id) => setStatus(id, "carried")}
             onDrop={(id) => setStatus(id, "dropped")}
           />
@@ -168,9 +172,16 @@ function DayScreen({ nowMin }: { nowMin: number }) {
       {/* Pinned within thumb reach, directly above the tabs. */}
       <footer className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm">
         <div className="mx-auto max-w-2xl px-6 py-3.5">
-          <QuickAdd threads={day.threads} onSubmit={handleAdd} />
+          <QuickAdd ref={quickAdd} threads={day.threads} onSubmit={handleAdd} />
         </div>
       </footer>
+
+      <TemplateSheet
+        open={templatesOpen}
+        todaysBlocks={day.blocks}
+        onClose={() => setTemplatesOpen(false)}
+        onApply={addBlocks}
+      />
 
       <BlockSheet
         block={editing}

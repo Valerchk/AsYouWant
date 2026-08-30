@@ -12,6 +12,7 @@ import { useNotes } from "@/lib/data/useNotes";
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/today", label: "Today", icon: "flow" },
   { href: "/inbox", label: "Inbox", icon: "template" },
+  { href: "/threads", label: "Goals", icon: "thread" },
 ];
 
 export function TabBar() {
