@@ -14,6 +14,8 @@ export interface Note {
   text: string;
   /** Epoch ms, for ordering newest-first. */
   createdAt: number;
+  /** YYYY-MM-DD when this is an intention for a day; null means someday. */
+  plannedFor: string | null;
 }
 
 export function loadNotes(): Note[] {
@@ -38,8 +40,13 @@ export function saveNotes(notes: Note[]): void {
   }
 }
 
-export function makeNote(text: string): Note {
-  return { id: newId(), text: text.trim(), createdAt: Date.now() };
+export function makeNote(text: string, plannedFor: string | null): Note {
+  return {
+    id: newId(),
+    text: text.trim(),
+    createdAt: Date.now(),
+    plannedFor,
+  };
 }
 
 /** "2 min ago", "3 h ago", "Tue" — short enough to sit beside the text. */

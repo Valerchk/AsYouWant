@@ -49,6 +49,18 @@
   --thread-6: #b03a80; /* fuchsia   */
   --thread-7: #c0384f; /* crimson   */
   --thread-8: #be5a1e; /* terracotta */
+  /* Eight more, deliberately deeper rather than merely different: sixteen
+     hues spread evenly around the wheel would stop being tellable apart.
+     Each is a darker reading of one above, and every ratio is measured
+     against paper. */
+  --thread-9: #7a4a12;  /* deep ochre      7.0:1 */
+  --thread-10: #4a5f14; /* deep olive      7.6:1 */
+  --thread-11: #10604a; /* deep emerald    7.9:1 */
+  --thread-12: #1d4d73; /* deep steel      8.3:1 */
+  --thread-13: #632a78; /* deep purple     9.4:1 */
+  --thread-14: #7a2857; /* deep fuchsia    9.1:1 */
+  --thread-15: #852738; /* deep crimson    8.5:1 */
+  --thread-16: #853d14; /* deep terracotta 7.7:1 */
 
   /* Paper takes a real, shallow shadow — one sheet resting on another.
      Not a glow, and never a blur big enough to read as a halo. */
@@ -84,6 +96,14 @@
     --thread-6: #e074b0;
     --thread-7: #ee7288;
     --thread-8: #ec8b54;
+    --thread-9: #f0cf94;
+    --thread-10: #cbdd94;
+    --thread-11: #8fdfc2;
+    --thread-12: #9ac8ef;
+    --thread-13: #dcb0f0;
+    --thread-14: #f0a6cd;
+    --thread-15: #f5a6b4;
+    --thread-16: #f5bc93;
 
     --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 10px rgb(0 0 0 / 0.28);
   }
@@ -117,6 +137,14 @@
   --thread-6: #e074b0;
   --thread-7: #ee7288;
   --thread-8: #ec8b54;
+  --thread-9: #f0cf94;
+  --thread-10: #cbdd94;
+  --thread-11: #8fdfc2;
+  --thread-12: #9ac8ef;
+  --thread-13: #dcb0f0;
+  --thread-14: #f0a6cd;
+  --thread-15: #f5a6b4;
+  --thread-16: #f5bc93;
 
   --lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 10px rgb(0 0 0 / 0.28);
 }
@@ -158,6 +186,14 @@
   --color-thread-6: var(--thread-6);
   --color-thread-7: var(--thread-7);
   --color-thread-8: var(--thread-8);
+  --color-thread-9: var(--thread-9);
+  --color-thread-10: var(--thread-10);
+  --color-thread-11: var(--thread-11);
+  --color-thread-12: var(--thread-12);
+  --color-thread-13: var(--thread-13);
+  --color-thread-14: var(--thread-14);
+  --color-thread-15: var(--thread-15);
+  --color-thread-16: var(--thread-16);
 
   /* --- type -------------------------------------------------------------
      Raised one step from the dark build: 11px was unreadable in sunlight,

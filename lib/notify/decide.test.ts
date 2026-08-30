@@ -90,10 +90,13 @@ describe("the live card", () => {
   it("tracks a block that is merely scheduled, not started", () => {
     // Nobody tapped "start" — which is most days — and the card must survive
     // that, or the headline feature disappears whenever life is normal.
-    const out = decide([anchor(H(10), 60)], ctx({ nowMin: H(10, 20) }));
-    const live = byTag(out, LIVE_TAG)!;
+    const b = anchor(H(10), 60, { title: "Lake walk" });
+    const live = byTag(decide([b], ctx({ nowMin: H(10, 20) })), LIVE_TAG)!;
 
-    expect(live.title).toContain("left");
+    // The title is only the block's name — iOS already prefixes the app's, so
+    // a title carrying the countdown as well wrapped onto three lines.
+    expect(live.title).toBe("Lake walk");
+    expect(live.body).toContain("left");
     expect(live.silent).toBe(true);
   });
 
@@ -117,6 +120,28 @@ describe("the live card", () => {
   it("disappears when nothing owns the moment", () => {
     const out = decide([anchor(H(14), 60)], ctx({ nowMin: H(10) }));
     expect(byTag(out, LIVE_TAG)).toBeUndefined();
+  });
+
+  it("never names the current block as the next one", () => {
+    // The bug this exists to prevent, seen on a real lock screen:
+    //   "Lake walk"  /  "1h 2m left · next Lake walk at 16:47"
+    // A block starting exactly on the current minute satisfies both "owns
+    // now" and "starts at or after now", so filtering by time alone put the
+    // same block on both lines.
+    const b = anchor(H(10), 60, { title: "Lake walk" });
+    const live = byTag(decide([b], ctx({ nowMin: H(10) })), LIVE_TAG)!;
+
+    expect(live.body).not.toContain("Lake walk");
+    expect(live.body).toContain("last one today");
+  });
+
+  it("names a genuinely different block as next", () => {
+    const now = anchor(H(10), 60, { title: "Lake walk" });
+    const later = anchor(H(12), 30, { title: "Standup" });
+    const live = byTag(decide([now, later], ctx({ nowMin: H(10, 20) })), LIVE_TAG)!;
+
+    expect(live.body).toContain("Standup");
+    expect(live.body).toContain("12:00");
   });
 
   it("carries the number of blocks still owed as the badge", () => {
@@ -163,7 +188,9 @@ describe("not spamming the lock screen", () => {
     const early = byTag(decide(blocks, ctx({ nowMin: H(10, 5) })), LIVE_TAG)!;
     const late = byTag(decide(blocks, ctx({ nowMin: H(10, 40) })), LIVE_TAG)!;
 
-    expect(early.title).not.toBe(late.title);
+    // The name is constant; the countdown lives in the body.
+    expect(early.title).toBe(late.title);
+    expect(early.body).not.toBe(late.body);
   });
 });
 
@@ -184,7 +211,8 @@ describe("running long", () => {
     );
     const over = out.find((n) => n.tag.startsWith("edge-over-"))!;
 
-    expect(over.title).toMatch(/over on Review/);
+    expect(over.title).toBe("Review");
+    expect(over.body).toMatch(/over/);
     expect(over.body).toMatch(/no longer fit/);
     expect(over.silent).toBe(false);
   });

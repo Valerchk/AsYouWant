@@ -178,15 +178,21 @@ export function createLocalDayStore(): DayStore {
 export function createLocalNoteStore(): NoteStore {
   return {
     async load() {
-      return loadNotes();
+      // Older stored notes predate the field; treat them as someday.
+      return loadNotes().map((n) => ({ ...n, plannedFor: n.plannedFor ?? null }));
     },
-    async add(text) {
-      const note = makeNote(text);
+    async add(text, plannedFor) {
+      const note = makeNote(text, plannedFor);
       saveNotes([note, ...loadNotes()]);
       return note;
     },
     async remove(id) {
       saveNotes(loadNotes().filter((n) => n.id !== id));
+    },
+    async setPlannedFor(id, day) {
+      saveNotes(
+        loadNotes().map((n) => (n.id === id ? { ...n, plannedFor: day } : n)),
+      );
     },
   };
 }

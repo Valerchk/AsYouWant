@@ -2,6 +2,7 @@
 
 import { formatClock, formatDuration } from "@/lib/time";
 import { Icon } from "@/components/icons/Icon";
+import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   freeMin: number;
   blockCount: number;
   overflowCount: number;
+  /** Things you mean to do today that take no place on the clock. */
+  intentionCount: number;
   confirmed: boolean;
   onConfirm: () => void;
   onOpenTemplates: () => void;
@@ -46,6 +49,7 @@ export function DayHeader({
   freeMin,
   blockCount,
   overflowCount,
+  intentionCount,
   confirmed,
   onConfirm,
   onOpenTemplates,
@@ -68,6 +72,14 @@ export function DayHeader({
           <h1 className="display mt-1.5 text-title text-deep">Today</h1>
         </div>
         <div className="-mr-2 flex items-center">
+          <Link
+            href="/review"
+            aria-label="Evening review"
+            title="Evening review"
+            className="flex h-9 w-9 items-center justify-center rounded-edge text-faint transition-colors hover:bg-sunk hover:text-ink"
+          >
+            <Icon name="crossSection" size={17} />
+          </Link>
           <button
             type="button"
             onClick={onOpenTemplates}
@@ -77,6 +89,14 @@ export function DayHeader({
           >
             <Icon name="template" size={17} />
           </button>
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
+            className="flex h-9 w-9 items-center justify-center rounded-edge text-faint transition-colors hover:bg-sunk hover:text-ink"
+          >
+            <Icon name="duration" size={17} />
+          </Link>
           <ThemeToggle />
         </div>
       </div>
@@ -85,6 +105,9 @@ export function DayHeader({
         <Metric label="blocks" value={String(blockCount)} />
         <Metric label="planned" value={formatDuration(plannedMin)} />
         <Metric label="free" value={formatDuration(freeMin)} tone="accent" />
+        {intentionCount > 0 && (
+          <Metric label="intentions" value={String(intentionCount)} />
+        )}
         {overflowCount > 0 && (
           <Metric label="won't fit" value={String(overflowCount)} tone="over" />
         )}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Icon } from "@/components/icons/Icon";
+import { GoalIcon, GOAL_ICONS, isGoalIcon } from "@/components/icons/GoalIcon";
 import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, THREAD_COLOR_COUNT, type Thread } from "@/lib/threads";
 import type { Block } from "@/lib/timeline/engine";
@@ -195,7 +196,42 @@ function SheetBody({
             {/* Recolouring a goal here changes it everywhere that goal
                     appears — it belongs to the goal, not to this block. */}
             {thread && (
-              <div className="mt-3">
+              <div className="mt-4">
+                <div className="mb-2 text-micro text-faint">
+                  Icon for &ldquo;{thread.name}&rdquo;
+                </div>
+                <div className="mb-4 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onPatchThread(thread.id, { icon: null })}
+                    aria-label="No icon"
+                    aria-pressed={!isGoalIcon(thread.icon)}
+                    className={`flex h-9 w-9 items-center justify-center rounded-edge ring-1 transition-colors ${
+                      !isGoalIcon(thread.icon)
+                        ? "bg-accent-soft text-accent ring-accent/40"
+                        : "text-faint ring-rule hover:bg-sunk"
+                    }`}
+                  >
+                    <span className="h-[2px] w-3.5 bg-current" />
+                  </button>
+                  {GOAL_ICONS.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      aria-label={name}
+                      aria-pressed={thread.icon === name}
+                      onClick={() => onPatchThread(thread.id, { icon: name })}
+                      className={`flex h-9 w-9 items-center justify-center rounded-edge ring-1 transition-colors ${
+                        thread.icon === name
+                          ? "bg-accent-soft text-accent ring-accent/40"
+                          : "text-ink ring-rule hover:bg-sunk"
+                      }`}
+                    >
+                      <GoalIcon name={name} size={17} />
+                    </button>
+                  ))}
+                </div>
+
                 <div className="mb-2 text-micro text-faint">
                   Colour of &ldquo;{thread.name}&rdquo;
                 </div>

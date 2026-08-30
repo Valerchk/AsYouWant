@@ -58,10 +58,14 @@ export interface NoteData {
   id: string;
   text: string;
   createdAt: number;
+  /** YYYY-MM-DD when this is an intention for a day; null means someday. */
+  plannedFor: string | null;
 }
 
 export interface NoteStore {
   load(): Promise<NoteData[]>;
-  add(text: string): Promise<NoteData>;
+  add(text: string, plannedFor: string | null): Promise<NoteData>;
   remove(id: string): Promise<void>;
+  /** Move between "today" and "someday". */
+  setPlannedFor(id: string, day: string | null): Promise<void>;
 }

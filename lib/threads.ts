@@ -1,13 +1,15 @@
 export interface Thread {
   id: string;
   name: string;
-  /** 0–7, indexing the thread palette in styles/tokens.css. */
+  /** 0–15, indexing the thread palette in styles/tokens.css. */
   colorIndex: number;
   /** Minutes a week this goal is meant to get. Null means no commitment. */
   weeklyTargetMin?: number | null;
+  /** A name from GOAL_ICONS, or null for the plain stroke. */
+  icon?: string | null;
 }
 
-export const THREAD_COLOR_COUNT = 8;
+export const THREAD_COLOR_COUNT = 16;
 
 /** CSS colour for a thread. Wraps rather than throwing on a stray index. */
 export function threadColor(colorIndex: number): string {

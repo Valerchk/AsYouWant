@@ -16,7 +16,7 @@
    ========================================================================== */
 
 import type { Layout, PlacedBlock } from "@/lib/timeline/engine";
-import { formatClock, formatDuration } from "@/lib/time";
+import { formatClock } from "@/lib/time";
 
 export interface NotificationPayload {
   /** Notifications sharing a tag replace one another instead of stacking. */
@@ -36,11 +36,38 @@ export const RITUAL_TAG = "ritual";
 /** Warn this many minutes before a running block is due to end. */
 export const ENDING_SOON_MIN = 10;
 
-function nextAfter(layout: Layout, afterMin: number): PlacedBlock | null {
+/**
+ * The block after this one.
+ *
+ * `exceptId` is not optional in spirit: a block starting exactly on the
+ * current minute satisfies both "owns now" and "starts at or after now", so
+ * filtering purely by time produced cards reading "Lake walk · 1h left / then
+ * Lake walk 16:47" — the same block, twice.
+ */
+function nextAfter(
+  layout: Layout,
+  afterMin: number,
+  exceptId: string | null,
+): PlacedBlock | null {
   const upcoming = layout.placed
-    .filter((p) => p.startMin >= afterMin && p.block.status === "planned")
+    .filter(
+      (p) =>
+        p.block.id !== exceptId &&
+        p.startMin >= afterMin &&
+        p.block.status === "planned",
+    )
     .sort((a, b) => a.startMin - b.startMin);
   return upcoming[0] ?? null;
+}
+
+/** "1h 2m", "45m", "2h" — for prose, where padded digits read as a clock. */
+function spoken(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 /** Blocks still owed today — the number on the app icon. */
@@ -68,20 +95,24 @@ export function composeLive(
   nowMin: number,
   displayMin: number,
 ): NotificationPayload {
-  const upNext = nextAfter(layout, nowMin);
-  const tail = upNext
-    ? `then ${upNext.block.title} ${formatClock(upNext.startMin)}`
-    : "nothing after this";
+  const upNext = nextAfter(layout, nowMin, current.block.id);
 
+  // The title is the block, nothing else. iOS already prefixes the app name,
+  // so a title carrying both name and countdown wrapped to three lines and
+  // read as noise.
   const state =
     current.overrunMin > 0
-      ? `${formatDuration(displayMin)} over`
-      : `${formatDuration(displayMin)} left`;
+      ? `${spoken(displayMin)} over`
+      : `${spoken(displayMin)} left`;
+
+  const body = upNext
+    ? `${state} · next ${upNext.block.title} at ${formatClock(upNext.startMin)}`
+    : `${state} · last one today`;
 
   return {
     tag: LIVE_TAG,
-    title: `${current.block.title} · ${state}`,
-    body: tail,
+    title: current.block.title,
+    body,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: true,
@@ -99,7 +130,7 @@ export function composeBlockStarted(
   return {
     tag: `edge-start-${block.block.id}`,
     title: block.block.title,
-    body: `You gave it ${formatDuration(block.block.plannedMin)}. Clock's running.`,
+    body: `You gave it ${spoken(block.block.plannedMin)}. Clock's running.`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -114,8 +145,8 @@ export function composeEndingSoon(
   const left = Math.max(0, block.endMin - nowMin);
   return {
     tag: `edge-soon-${block.block.id}`,
-    title: `${formatDuration(left)} left`,
-    body: `${block.block.title} — land the thought.`,
+    title: block.block.title,
+    body: `${spoken(left)} left. Land the thought.`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -134,8 +165,8 @@ export function composeOverrun(
 
   return {
     tag: `edge-over-${block.block.id}`,
-    title: `${formatDuration(block.overrunMin)} over on ${block.block.title}`,
-    body: consequence,
+    title: block.block.title,
+    body: `${spoken(block.overrunMin)} over. ${consequence}`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -152,7 +183,7 @@ export function composeAnchorMissed(
   return {
     tag: `edge-missed-${block.block.id}`,
     title: block.block.title,
-    body: `Ended ${formatDuration(since)} ago. Did it happen?`,
+    body: `Ended ${spoken(since)} ago. Did it happen?`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -183,8 +214,8 @@ export function composeMorning(layout: Layout): NotificationPayload {
 
   return {
     tag: RITUAL_TAG,
-    title: `${count} ${count === 1 ? "block" : "blocks"} · ${formatDuration(planned)}`,
-    body: "Confirm the day and the reminders start.",
+    title: "Today is drafted",
+    body: `${count} ${count === 1 ? "block" : "blocks"}, ${spoken(planned)}. Confirm it and reminders start.`,
     navigate: "/today",
     appBadge: count,
     silent: false,
@@ -218,7 +249,7 @@ export function composeEvening(
 
   const top = [...perThread.entries()].sort((a, b) => b[1] - a[1])[0];
   const headline = top
-    ? `${threadNames.get(top[0]) ?? "Unthreaded"} got ${formatDuration(top[1])}`
+    ? `${threadNames.get(top[0]) ?? "Unthreaded"} got ${spoken(top[1])}`
     : `${done.length} ${done.length === 1 ? "block" : "blocks"} closed`;
 
   return {

@@ -9,6 +9,7 @@ import { GapStrip } from "./GapStrip";
 import { PastStrip } from "./PastStrip";
 import { NowLine } from "./NowLine";
 import { OverflowTray } from "./OverflowTray";
+import { DragGhost } from "./DragGhost";
 import { CLOCK_W, RAIL_W } from "./motion";
 
 interface Props {
@@ -43,6 +44,9 @@ export function Ribbon({
   // The past is folded by default and expands on demand. Kept here rather than
   // in geometry so the geometry stays a pure function of the day.
   const [showPast, setShowPast] = useState(false);
+  // Where a dragged block would land. Drawn as a ghost so the gesture answers
+  // "where does this go" before you let go of it.
+  const [ghostMin, setGhostMin] = useState<number | null>(null);
 
   const result = useMemo(
     () => layout(blocks, { nowMin, dayStartMin, dayEndMin }),
@@ -82,8 +86,10 @@ export function Ribbon({
         />
 
         {nowMin >= geo.startMin && nowMin <= geo.endMin && (
-          <NowLine y={nowY} />
+          <NowLine y={nowY} nowMin={nowMin} />
         )}
+
+        {ghostMin !== null && <DragGhost geo={geo} startMin={ghostMin} />}
 
         {geo.segments.map((seg) => {
           if (seg.type === "block") {
@@ -91,12 +97,14 @@ export function Ribbon({
               <BlockRow
                 key={seg.key}
                 segment={seg}
+                nowMin={nowMin}
                 thread={threadById(threads, seg.placed.block.threadId)}
                 slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
                 onToggleDone={onToggleDone}
                 onOpen={onOpenBlock}
                 minuteAt={(offsetY) => minuteForY(geo, seg.top + offsetY)}
                 onMove={onMoveBlock}
+                onDragPreview={setGhostMin}
               />
             );
           }

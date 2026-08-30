@@ -14,6 +14,7 @@ import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
 import { formatClock, formatDuration } from "@/lib/time";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { useDay } from "@/lib/data/useDay";
+import { useNotes } from "@/lib/data/useNotes";
 
 /* The day. Everything goes through useDay, which reads from Supabase when it
    is configured and from browser storage until then — this screen never knows
@@ -45,6 +46,10 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const quickAdd = useRef<QuickAddHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+
+  // Intentions live in the Inbox but belong to today; the header carries the
+  // count so the ribbon never has to make room for them.
+  const { notes } = useNotes();
 
   const result = useMemo(
     () =>
@@ -134,6 +139,8 @@ function DayScreen({ nowMin }: { nowMin: number }) {
 
   const editing = day.blocks.find((b) => b.id === editingId) ?? null;
 
+  const intentions = notes.filter((n) => n.plannedFor === day.date).length;
+
   return (
     <>
       <main className="chrome mx-auto max-w-2xl pb-32">
@@ -143,6 +150,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           freeMin={result.freeMin}
           blockCount={result.placed.length}
           overflowCount={result.overflow.length}
+          intentionCount={intentions}
           confirmed={day.confirmed}
           onConfirm={confirmDay}
           onOpenTemplates={() => setTemplatesOpen(true)}

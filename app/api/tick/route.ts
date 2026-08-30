@@ -111,6 +111,11 @@ export async function POST(request: NextRequest) {
           dayEndMin: profile.day_end_min,
           eveningReviewMin: profile.evening_review_min,
           dayConfirmed: profile.day_confirmed_on === today,
+          notifyLive: profile.notify_live,
+          notifyLeadMin: profile.notify_lead_min,
+          quietFromMin: profile.quiet_from_min,
+          quietToMin: profile.quiet_to_min,
+          requireConfirm: profile.require_confirm,
         },
         threadNames,
       );

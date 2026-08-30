@@ -26,6 +26,15 @@ type ProfileRow = {
   evening_review_min: number;
   day_confirmed_on: string | null;
   created_at: string;
+  /* Preferences (migration 0003). Every default matches the behaviour that
+     was hard-coded before them, so an untouched account is unchanged. */
+  ribbon_density: "compact" | "comfortable";
+  collapse_past: boolean;
+  notify_live: boolean;
+  notify_lead_min: number;
+  quiet_from_min: number | null;
+  quiet_to_min: number | null;
+  require_confirm: boolean;
 }
 
 type ThreadRow = {
@@ -33,6 +42,7 @@ type ThreadRow = {
   user_id: string;
   name: string;
   color_index: number;
+  icon: string | null;
   weekly_target_min: number | null;
   sort_order: number;
   archived_at: string | null;
@@ -71,6 +81,8 @@ type NoteRow = {
   user_id: string;
   text: string;
   created_at: string;
+  /** NULL is "someday"; a date makes it an intention for that day. */
+  planned_for: string | null;
 };
 
 type PushSubscriptionRow = {
@@ -105,7 +117,13 @@ export interface Database {
       profiles: Table<ProfileRow, keyof ProfileRow>;
       threads: Table<
         ThreadRow,
-        "id" | "color_index" | "sort_order" | "archived_at" | "created_at" | "weekly_target_min"
+        | "id"
+        | "color_index"
+        | "sort_order"
+        | "archived_at"
+        | "created_at"
+        | "weekly_target_min"
+        | "icon"
       >;
       blocks: Table<
         BlockRow,
@@ -113,7 +131,7 @@ export interface Database {
         "thread_id" | "actual_start_min" | "actual_end_min" | "carried_from"
       >;
       day_templates: Table<DayTemplateRow, "id" | "created_at">;
-      notes: Table<NoteRow, "id" | "created_at">;
+      notes: Table<NoteRow, "id" | "created_at" | "planned_for">;
       push_subscriptions: Table<
         PushSubscriptionRow,
         "id" | "fail_count" | "last_ok_at" | "created_at"

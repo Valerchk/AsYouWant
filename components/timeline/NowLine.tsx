@@ -1,36 +1,36 @@
 "use client";
 
 import { motion } from "motion/react";
+import { formatClock } from "@/lib/time";
 import { CLOCK_W, RAIL_W } from "./motion";
 
-/* This minute, laid across the day.
+/* This minute, marked on the rail.
 
-   It renders *beneath* the blocks (z-0 against their z-10) so it passes
-   behind their text instead of striking through it — the earlier version sat
-   on top and cut straight across whatever title it crossed. The solid part is
-   the marker on the rail, where nothing competes with it. */
+   The line used to run the full width and struck straight through whatever
+   block title it crossed — legible neither as a line nor as a title. It now
+   stops at the edge of the text column: the mark and the clock say where the
+   moment is, and the running block itself (see BlockRow) says which block
+   owns it. */
 
-export function NowLine({ y }: { y: number }) {
+export function NowLine({ y, nowMin }: { y: number; nowMin: number }) {
   return (
     <motion.div
-      // The scroll target when the app opens: you land on the moment you are
-      // standing in, not at the top of the morning.
+      // The scroll target when the app opens.
       id="now-anchor"
       layout
       className="pointer-events-none absolute inset-x-0 z-0"
       transition={{ type: "spring", stiffness: 260, damping: 30 }}
       style={{ top: y, height: 1 }}
     >
+      {/* A short stub across the rail only — never into the titles. */}
       <div
         className="absolute h-px"
         style={{
           left: CLOCK_W,
-          right: 0,
+          width: RAIL_W,
           background: "var(--color-accent)",
-          opacity: 0.4,
         }}
       />
-      {/* The marker itself, on the rail where there is no text to obscure. */}
       <div
         className="absolute rounded-plate"
         style={{
@@ -41,9 +41,12 @@ export function NowLine({ y }: { y: number }) {
           background: "var(--color-accent)",
         }}
       />
-      {/* No clock label here. It shared the gutter with the blocks' own start
-          times and collided with whichever one it drifted past; the current
-          time lives in the header instead, where nothing moves under it. */}
+      <div
+        className="num absolute text-micro leading-none font-medium text-accent"
+        style={{ left: 0, top: -5, width: CLOCK_W - 10, textAlign: "right" }}
+      >
+        {formatClock(nowMin)}
+      </div>
     </motion.div>
   );
 }

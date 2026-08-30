@@ -26,6 +26,35 @@ export interface NotifyContext {
   eveningReviewMin: number;
   /** False until the person has confirmed today's plan. */
   dayConfirmed: boolean;
+
+  /* Preferences. Defaults match what used to be hard-coded, so an account
+     that has never opened Settings behaves exactly as before. */
+  /** The self-updating lock-screen card. */
+  notifyLive?: boolean;
+  /** Minutes before a block ends to speak up. 0 disables it. */
+  notifyLeadMin?: number;
+  /** Nothing is sent between these, whatever else is true. */
+  quietFromMin?: number | null;
+  quietToMin?: number | null;
+  /** When false, reminders start without waiting for confirmation. */
+  requireConfirm?: boolean;
+}
+
+/**
+ * Quiet hours, which usually wrap past midnight — 22:00 to 07:00 is a range
+ * that starts after it ends, so a plain `from <= now && now < to` is wrong
+ * for exactly the hours people care most about.
+ */
+function inQuietHours(
+  nowMin: number,
+  from: number | null | undefined,
+  to: number | null | undefined,
+): boolean {
+  if (from === null || from === undefined) return false;
+  if (to === null || to === undefined) return false;
+  return from <= to
+    ? nowMin >= from && nowMin < to
+    : nowMin >= from || nowMin < to;
 }
 
 /** How long a missed anchor stays worth mentioning. */
@@ -73,17 +102,24 @@ export function decideNotifications(
   threadNames: Map<string, string>,
 ): NotificationPayload[] {
   const { nowMin, dayStartMin, eveningReviewMin, dayConfirmed } = ctx;
+  const leadMin = ctx.notifyLeadMin ?? ENDING_SOON_MIN;
+  const wantsLive = ctx.notifyLive ?? true;
+  const needsConfirm = ctx.requireConfirm ?? true;
 
   // Outside waking hours the app says nothing at all.
   if (nowMin < dayStartMin) return [];
+
+  // Quiet hours win over everything, including the evening review.
+  if (inQuietHours(nowMin, ctx.quietFromMin, ctx.quietToMin)) return [];
 
   if (nowMin >= eveningReviewMin) {
     return [composeEvening(layout, threadNames)];
   }
 
   // The app does not order anyone around about a day they never agreed to.
-  // Until the plan is confirmed, the only thing it may say is "confirm it".
-  if (!dayConfirmed) {
+  // Until the plan is confirmed, the only thing it may say is "confirm it" —
+  // unless the person has turned that requirement off.
+  if (needsConfirm && !dayConfirmed) {
     return [composeMorning(layout)];
   }
 
@@ -97,13 +133,15 @@ export function decideNotifications(
         ? Math.max(0, settled - (current.startMin + current.block.plannedMin))
         : Math.max(0, current.endMin - settled);
 
-    out.push(composeLive(current, layout, nowMin, display));
+    if (wantsLive) {
+      out.push(composeLive(current, layout, nowMin, display));
+    }
 
     if (current.overrunMin > 0) {
       out.push(composeOverrun(current, layout));
-    } else {
+    } else if (leadMin > 0) {
       const left = current.endMin - nowMin;
-      if (left > 0 && left <= ENDING_SOON_MIN) {
+      if (left > 0 && left <= leadMin) {
         out.push(composeEndingSoon(current, layout, nowMin));
       }
     }

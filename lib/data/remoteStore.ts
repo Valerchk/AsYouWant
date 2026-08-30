@@ -181,12 +181,14 @@ export function createRemoteDayStore(): DayStore {
         name?: string;
         color_index?: number;
         weekly_target_min?: number | null;
+        icon?: string | null;
       } = {};
       if (patch.name !== undefined) row.name = patch.name;
       if (patch.colorIndex !== undefined) row.color_index = patch.colorIndex;
       if (patch.weeklyTargetMin !== undefined) {
         row.weekly_target_min = patch.weeklyTargetMin;
       }
+      if (patch.icon !== undefined) row.icon = patch.icon;
 
       const { error } = await supabase.from("threads").update(row).eq("id", id);
       if (error) throw new Error(error.message);
@@ -297,14 +299,15 @@ export function createRemoteNoteStore(): NoteStore {
         id: r.id,
         text: r.text,
         createdAt: new Date(r.created_at).getTime(),
+        plannedFor: r.planned_for,
       }));
     },
 
-    async add(text: string): Promise<NoteData> {
+    async add(text: string, plannedFor: string | null): Promise<NoteData> {
       const { supabase, userId } = await requireUser();
       const { data, error } = await supabase
         .from("notes")
-        .insert({ user_id: userId, text: text.trim() })
+        .insert({ user_id: userId, text: text.trim(), planned_for: plannedFor })
         .select()
         .single();
 
@@ -313,12 +316,22 @@ export function createRemoteNoteStore(): NoteStore {
         id: data.id,
         text: data.text,
         createdAt: new Date(data.created_at).getTime(),
+        plannedFor: data.planned_for,
       };
     },
 
     async remove(id: string) {
       const supabase = createClient();
       const { error } = await supabase.from("notes").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+
+    async setPlannedFor(id: string, day: string | null) {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("notes")
+        .update({ planned_for: day })
+        .eq("id", id);
       if (error) throw new Error(error.message);
     },
   };
