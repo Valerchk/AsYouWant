@@ -1,0 +1,185 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Ribbon } from "@/components/timeline/Ribbon";
+import { QuickAdd } from "@/components/QuickAdd";
+import { DayHeader } from "@/components/DayHeader";
+import { InstallGate } from "@/components/InstallGate";
+import { BlockSheet } from "@/components/BlockSheet";
+import { LoadFailure } from "@/components/LoadFailure";
+import { parseQuickAdd } from "@/lib/parse/quickAdd";
+import { layout, type Block } from "@/lib/timeline/engine";
+import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
+import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
+import { useDay } from "@/lib/data/useDay";
+
+/* The day. Everything goes through useDay, which reads from Supabase when it
+   is configured and from browser storage until then — this screen never knows
+   which. */
+
+export default function Today() {
+  const nowMin = useNowMin();
+
+  // One frame before the clock exists, matching the server output exactly.
+  if (nowMin === CLOCK_NOT_READY) {
+    return <main className="min-h-dvh bg-paper" />;
+  }
+
+  return <DayScreen nowMin={nowMin} />;
+}
+
+function DayScreen({ nowMin }: { nowMin: number }) {
+  const {
+    day,
+    loading,
+    error,
+    addBlock,
+    addBlockWithThread,
+    patchBlock,
+    deleteBlock,
+    patchThread,
+    confirmDay,
+  } = useDay(nowMin);
+  const scrolled = useRef(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const result = useMemo(
+    () =>
+      layout(day?.blocks ?? [], {
+        nowMin,
+        dayStartMin: day?.dayStartMin ?? 8 * 60,
+        dayEndMin: day?.dayEndMin ?? 22 * 60,
+      }),
+    [day?.blocks, day?.dayStartMin, day?.dayEndMin, nowMin],
+  );
+
+  // Open on the current moment rather than at the top of the morning.
+  useEffect(() => {
+    if (!day || scrolled.current) return;
+    scrolled.current = true;
+    document
+      .getElementById("now-anchor")
+      ?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [day]);
+
+  function handleAdd(input: string) {
+    const { parsed } = parseQuickAdd(input);
+    // A #tag that names no existing goal creates one, so a fresh account is
+    // not a dead end.
+    addBlockWithThread(
+      {
+        title: parsed.title,
+        kind: parsed.kind,
+        startMin: parsed.startMin,
+        plannedMin: parsed.plannedMin,
+        status: "planned",
+        threadId: null,
+        actualStartMin: null,
+        actualEndMin: null,
+      },
+      parsed.threadName,
+    );
+  }
+
+  function toggleDone(blockId: string) {
+    const block = day?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+
+    if (block.status === "done") {
+      const { status, actualStartMin, actualEndMin } = reopenBlock(block);
+      patchBlock(blockId, { status, actualStartMin, actualEndMin });
+      return;
+    }
+
+    const placed = result.placed.find((p) => p.block.id === blockId);
+    const { status, actualStartMin, actualEndMin } = closeBlock(
+      block,
+      placed?.startMin ?? nowMin,
+      nowMin,
+    );
+    patchBlock(blockId, { status, actualStartMin, actualEndMin });
+  }
+
+  function fillGap(startMin: number) {
+    addBlock({
+      title: "New block",
+      kind: "anchor",
+      startMin,
+      plannedMin: 30,
+      status: "planned",
+      threadId: null,
+      actualStartMin: null,
+      actualEndMin: null,
+    });
+  }
+
+  if (error) return <LoadFailure what="your day" message={error} />;
+
+  if (loading || !day) {
+    return (
+      <main className="chrome mx-auto max-w-2xl px-6 pt-7">
+        <div className="num text-micro text-faint">LOADING</div>
+      </main>
+    );
+  }
+
+  const plannedMin = day.blocks
+    .filter((b) => b.status === "planned" || b.status === "active")
+    .reduce((sum, b) => sum + b.plannedMin, 0);
+
+  const setStatus = (id: string, status: Block["status"]) =>
+    patchBlock(id, { status });
+
+  const editing = day.blocks.find((b) => b.id === editingId) ?? null;
+
+  return (
+    <>
+      <main className="chrome mx-auto max-w-2xl pb-32">
+        <DayHeader
+          nowMin={nowMin}
+          plannedMin={plannedMin}
+          freeMin={result.freeMin}
+          blockCount={result.placed.length}
+          overflowCount={result.overflow.length}
+          confirmed={day.confirmed}
+          onConfirm={confirmDay}
+        />
+
+        <div className="mt-7 px-6">
+          <InstallGate />
+        </div>
+
+        <div className="mt-8 px-6">
+          <Ribbon
+            blocks={day.blocks}
+            threads={day.threads}
+            nowMin={nowMin}
+            dayStartMin={day.dayStartMin}
+            dayEndMin={day.dayEndMin}
+            onToggleDone={toggleDone}
+            onOpenBlock={setEditingId}
+            onFillGap={fillGap}
+            onPushToTomorrow={(id) => setStatus(id, "carried")}
+            onDrop={(id) => setStatus(id, "dropped")}
+          />
+        </div>
+      </main>
+
+      {/* Pinned within thumb reach, directly above the tabs. */}
+      <footer className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm">
+        <div className="mx-auto max-w-2xl px-6 py-3.5">
+          <QuickAdd threads={day.threads} onSubmit={handleAdd} />
+        </div>
+      </footer>
+
+      <BlockSheet
+        block={editing}
+        threads={day.threads}
+        onClose={() => setEditingId(null)}
+        onPatch={patchBlock}
+        onDelete={deleteBlock}
+        onPatchThread={patchThread}
+      />
+    </>
+  );
+}

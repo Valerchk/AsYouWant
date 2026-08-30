@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/* Font faces are loaded by next/font in app/layout.tsx, which exposes them as
+   the three CSS variables wired up here. `inline` keeps them from gaining an
+   extra layer of indirection in every generated utility. */
+@theme inline {
+  --font-display: var(--font-unbounded), system-ui, sans-serif;
+  --font-sans: var(--font-onest), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+html {
+  /* Safari inflates text in landscape unless told not to. */
+  -webkit-text-size-adjust: 100%;
+  /* Kill the rubber-band scroll that makes an installed PWA feel like a
+     web page rather than an app. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* Removes the 300ms tap delay and the grey flash on touch. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Every digit in this app is monospaced and tabular. A countdown whose
+   numerals change width jitters once a second, and that reads as cheap. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Unbounded only ever appears at display sizes, tightened — its default
+   tracking is drawn for posters, not screens. */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+/* Interface text should not be selectable; a planner you accidentally
+   highlight while dragging feels broken. Inputs opt back in. */
+.chrome {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ==========================================================================
+   Drafting surface
+   ========================================================================== */
+
+/* Graph paper: ruled on both axes, drawn with gradients rather than elements
+   so scrolling a whole day past it costs nothing. */
+.etched {
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--color-grid) 0 1px,
+      transparent 1px var(--etch-step, 64px)
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--color-grid) 0 1px,
+      transparent 1px var(--etch-step, 64px)
+    );
+}
+
+/* A single hairline. Borders in this system are always exactly 1 device
+   pixel — scaling them up is what makes an interface look like a mockup. */
+.rule {
+  box-shadow: var(--shadow-inset-rule);
+}
+
+/* Icons keep a constant on-screen stroke at every size, the way a drafted
+   line does. Without this, a 40px icon renders visibly fatter than a 16px
+   one and the set stops reading as one hand. */
+[data-icon] * {
+  vector-effect: non-scaling-stroke;
+}
+
+/* The running block's marker breathes. Transform and opacity only, so it
+   stays on the compositor and never costs a layout pass — this thing is on
+   screen for hours at a time. */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2.4s var(--ease-instrument) infinite;
+  will-change: transform, opacity;
+}
+
+/* ==========================================================================
+   Bottom furniture
+   ========================================================================== */
+
+/* Both screens put their input in the same spot, directly above the tabs, so
+   the thumb only ever learns one place. One shared height keeps them from
+   drifting apart. */
+:root {
+  --tabbar-h: 57px;
+}
+
+.above-tabs {
+  position: fixed;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h));
+  left: 0;
+  z-index: 20;
+}
+
+/* ==========================================================================
+   iOS standalone
+   ========================================================================== */
+
+/* Installed to the Home Screen there is no browser chrome, so the app owns
+   the notch and the home indicator. */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ==========================================================================
+   Reduced motion
+   ========================================================================== */
+
+/* The ribbon's physics is the product, so it degrades to instant rather than
+   disappearing: blocks still land where they belong, they just don't travel.
+   Position lives in CSS precisely so this stays true. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
