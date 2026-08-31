@@ -91,6 +91,26 @@ export function BlockRow({
       : "var(--color-accent)"
     : colour;
 
+  /* The block is filled with its goal's colour, which is what lets a day be
+     read as a distribution of time from across the room — and what made a
+     separate row of goals unnecessary.
+
+     Mixed with paper rather than laid down at full strength, and that is not
+     timidity: in the light theme the palette runs to mid tones (#b0741c,
+     #2a6fa8) where white text falls to about 3:1, and in the dark theme the
+     same threads are pale (#e0a94d) where ink text fails instead. One mix
+     keeps every one of the sixteen readable in both themes without a second
+     hand-tuned token per colour. Full strength is spent where it costs
+     nothing: the thread on the rail, the goal's icon, the progress line. */
+  const strength = done ? 10 : holdsNow ? 30 : 20;
+  const fill = external
+    ? "transparent"
+    : thread
+      ? `color-mix(in oklab, ${colour} ${strength}%, var(--color-paper))`
+      : done
+        ? "transparent"
+        : "var(--color-sunk)";
+
   return (
     <motion.div
       // `top` is real CSS, not an animated transform. Carrying the position
@@ -103,31 +123,34 @@ export function BlockRow({
       transition={RIBBON_SPRING}
       animate={{ opacity: dragMin !== null ? 0.35 : 1 }}
     >
-      {/* The current block is tinted with its own thread's colour, which is
-          how "now" reads without a line through the words. */}
-      {holdsNow && (
-        <div
-          className="pointer-events-none absolute top-0 right-0 bottom-0 rounded-edge"
-          style={{
-            left: CLOCK_W + RAIL_W,
-            background: accent,
-            opacity: 0.09,
-          }}
-        />
-      )}
-
-      {/* A hairline above every block. On paper, blocks with no separation
-          read as one undifferentiated column. */}
+      {/* The block itself. Inset by a pixel top and bottom so two blocks that
+          abut in time keep a seam of paper between them rather than merging
+          into one field of colour. */}
       <div
-        className="absolute top-0 right-0 h-px"
-        style={{ background: "var(--color-grid)", left: CLOCK_W }}
+        className="pointer-events-none absolute rounded-edge"
+        style={{
+          left: CLOCK_W + RAIL_W,
+          right: 0,
+          top: 1,
+          bottom: 1,
+          background: fill,
+          // Somebody else's record of the day: outlined, never filled.
+          boxShadow: external
+            ? "inset 0 0 0 1px var(--color-grid)"
+            : undefined,
+        }}
       />
 
-      {/* How much of it has gone. One thin line, along the bottom edge. */}
+      {/* How much of it has gone. One thin line, along the bottom edge of the
+          block, at the colour's full strength. */}
       {holdsNow && (
         <div
-          className="pointer-events-none absolute right-0 bottom-0 h-[2px]"
-          style={{ left: CLOCK_W + RAIL_W, background: "var(--color-rule)" }}
+          className="pointer-events-none absolute right-0 h-[2px]"
+          style={{
+            left: CLOCK_W + RAIL_W,
+            bottom: 1,
+            background: "var(--color-rule)",
+          }}
         >
           <motion.div
             className="h-full"
@@ -145,13 +168,21 @@ export function BlockRow({
           gridTemplateColumns: `${CLOCK_W}px ${RAIL_W}px minmax(0,1fr) auto`,
         }}
       >
-        {/* clock — right-aligned so colons line up down the whole day */}
+        {/* clock — right-aligned so colons line up down the whole day.
+
+            A block with no hour of its own is printed with a tilde: it starts
+            about then, and will start somewhere else if the morning slips.
+            One character does the work the words "anchored" and "flows" were
+            failing to do. */}
         <div className="num pt-3 pr-2.5 text-right text-micro leading-5">
           <span
             className={
               isRunning ? "text-accent" : done || external ? "text-faint" : "text-ink"
             }
           >
+            {block.kind === "flow" && !done && (
+              <span className="text-faint">~</span>
+            )}
             {formatClock(placed.startMin)}
           </span>
         </div>
@@ -247,17 +278,14 @@ export function BlockRow({
                   aria-label={`Open ${thread.name}`}
                   className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-faint transition-colors hover:text-ink"
                 >
-                  {isGoalIcon(thread.icon) ? (
+                  {/* No coloured dash beside the name any more: the block is
+                      already that colour, and the mark was saying it twice. */}
+                  {isGoalIcon(thread.icon) && (
                     <GoalIcon
                       name={thread.icon}
                       size={13}
                       className="shrink-0"
                       style={{ color: colour }}
-                    />
-                  ) : (
-                    <span
-                      className="inline-block h-[2px] w-3 shrink-0"
-                      style={{ background: colour }}
                     />
                   )}
                   <span className="truncate">{thread.name}</span>
@@ -304,13 +332,8 @@ export function BlockRow({
         {/* duration, what the block gave back, and the drag handle */}
         <div className="flex flex-col items-end gap-1 pt-3">
           <div className="flex items-center gap-1.5">
-            {block.kind === "anchor" && !external && (
-              <Icon
-                name="anchor"
-                size={13}
-                className={isMissed ? "text-over" : "text-faint"}
-              />
-            )}
+            {/* The anchor icon used to sit here saying "this one is fixed".
+                The tilde in the clock gutter says it, by its absence. */}
             <span
               className={`num text-micro leading-5 ${
                 done || external ? "text-faint" : "text-ink"

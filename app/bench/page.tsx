@@ -165,7 +165,7 @@ export default function Bench() {
               about the rest of the day is a lie now.
             </p>
             <p className="mt-1 text-fine text-faint">
-              Anchored blocks hold. Flow blocks move.
+              Blocks with an hour hold. Blocks without one move.
             </p>
           </div>
 

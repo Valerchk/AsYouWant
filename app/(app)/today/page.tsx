@@ -4,14 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ribbon } from "@/components/timeline/Ribbon";
 import { Composer, type ComposerHandle } from "@/components/Composer";
 import { DayHeader } from "@/components/DayHeader";
-import { GoalStrip } from "@/components/GoalStrip";
+import { GoalsSheet } from "@/components/GoalsSheet";
 import { GoalSheet } from "@/components/GoalSheet";
 import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
 import { TemplateSheet } from "@/components/TemplateSheet";
 import { LoadFailure } from "@/components/LoadFailure";
+import { Icon } from "@/components/icons/Icon";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
+import { threadColor } from "@/lib/threads";
 import {
   closeBlock,
   pauseBlock,
@@ -70,6 +72,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const composer = useRef<ComposerHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [goalId, setGoalId] = useState<string | null>(null);
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
   // Intentions live in the Inbox but belong to today; the header carries the
@@ -284,6 +287,11 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const editing = day.blocks.find((b) => b.id === editingId) ?? null;
   const goal = day.threads.find((t) => t.id === goalId) ?? null;
 
+  const weekTotal = day.threads.reduce(
+    (sum, t) => sum + (week?.totals.get(t.id) ?? 0),
+    0,
+  );
+
   const intentions = notes.filter((n) => n.plannedFor === date).length;
 
   // The day on screen always knows its own count, whatever the week query
@@ -315,15 +323,34 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           onOpenTemplates={() => setTemplatesOpen(true)}
         />
 
-        {/* What the days are for, on the day itself. */}
-        <div className="mt-5 px-6">
-          <GoalStrip
-            threads={day.threads}
-            week={week?.totals ?? new Map()}
-            onOpen={setGoalId}
-            onCreate={() => composer.current?.newGoal()}
-          />
-        </div>
+        {/* One line where a scrolling row used to be. It says what the week
+            has amounted to and opens the list where every goal is visible at
+            once — goals are no longer something the day screen manages. */}
+        {day.threads.length > 0 && (
+          <div className="mt-3 px-6">
+            <button
+              type="button"
+              onClick={() => setGoalsOpen(true)}
+              className="flex w-full items-center gap-2 py-1 text-left text-micro text-faint transition-colors hover:text-ink"
+            >
+              <span className="flex -space-x-1">
+                {day.threads.slice(0, 6).map((t) => (
+                  <span
+                    key={t.id}
+                    className="h-2.5 w-2.5 rounded-plate ring-1 ring-paper"
+                    style={{ background: threadColor(t.colorIndex) }}
+                  />
+                ))}
+              </span>
+              <span className="num">
+                {day.threads.length}{" "}
+                {day.threads.length === 1 ? "goal" : "goals"}
+                {weekTotal > 0 && ` \u00b7 ${formatDuration(weekTotal)} this week`}
+              </span>
+              <Icon name="chevron" size={12} className="shrink-0" />
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 px-6">
           <InstallGate />
@@ -383,6 +410,18 @@ function DayScreen({ nowMin }: { nowMin: number }) {
         onCarry={(b) => carryTo(b, addDays(date, 1))}
         onPatchThread={patchThread}
         onRepeat={handleRepeat}
+      />
+
+      <GoalsSheet
+        open={goalsOpen}
+        threads={day.threads}
+        week={week?.totals ?? new Map()}
+        onClose={() => setGoalsOpen(false)}
+        onOpenGoal={(id) => {
+          setGoalsOpen(false);
+          setGoalId(id);
+        }}
+        onCreate={addThreadNamed}
       />
 
       <GoalSheet

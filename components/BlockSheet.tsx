@@ -150,7 +150,7 @@ function SheetBody({
             onClick={() => onPatch(block.id, { kind: "flow", startMin: null })}
           >
             <Icon name="flow" size={13} />
-            Flows
+            Anytime
           </Chip>
           <Chip
             active={block.kind === "anchor"}
@@ -162,7 +162,7 @@ function SheetBody({
             }
           >
             <Icon name="anchor" size={13} />
-            Anchored
+            At a time
           </Chip>
 
           {block.kind === "anchor" && (
@@ -180,12 +180,13 @@ function SheetBody({
             />
           )}
         </div>
-        {/* Spelled out, because "flows" and "anchored" are the two words the
-            whole ribbon rests on and neither explains itself. */}
+        {/* The chips answer "when"; this says what follows from the answer.
+            The old labels were "Anchored" and "Flows", which needed a glossary
+            nobody was given. */}
         <p className="mt-2 text-micro text-faint">
           {block.kind === "anchor"
-            ? "Held at this hour whatever else moves — a meeting, a train. Everything elastic goes around it. Drag its handle to change the hour."
-            : "No hour of its own: it takes the next opening between the anchors, and moves with them when the day slips. Drag its handle to change its place in the queue."}
+            ? "Held at this hour whatever else moves — a meeting, a train. Everything else goes around it. Drag its handle to change the hour."
+            : "No hour of its own: it takes the next opening between the fixed ones, and moves with them when the day slips. Drag its handle to change its place in the queue."}
         </p>
       </Section>
 
