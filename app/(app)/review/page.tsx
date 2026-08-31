@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
 import { LoadFailure } from "@/components/LoadFailure";
@@ -8,7 +8,7 @@ import {
   DayCrossSection,
   type Strand,
 } from "@/components/review/DayCrossSection";
-import { formatDuration } from "@/lib/time";
+import { addDays, formatDuration, localDay } from "@/lib/time";
 import { threadColor } from "@/lib/threads";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { useDay } from "@/lib/data/useDay";
@@ -23,7 +23,9 @@ export default function Review() {
 }
 
 function ReviewScreen({ nowMin }: { nowMin: number }) {
-  const { day, loading, error, patchBlock } = useDay(nowMin);
+  const [today] = useState(() => localDay());
+  const [date, setDate] = useState(today);
+  const { day, loading, error, patchBlock, carryTo } = useDay(date, nowMin);
 
   const { strands, doneMin, doneCount, unfinished } = useMemo(() => {
     const blocks = day?.blocks ?? [];
@@ -88,7 +90,33 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
         <div className="num text-micro tracking-[0.18em] text-faint">
           WHERE THE DAY WENT
         </div>
-        <h1 className="display mt-1.5 text-title text-deep">The cut</h1>
+        <div className="mt-1.5 flex items-center justify-between gap-3">
+          <h1 className="display text-title text-deep">The cut</h1>
+          {/* A cut of one day says nothing about whether it was a good one.
+              The arrows are what make it a record rather than a snapshot. */}
+          <div className="-mr-2 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setDate(addDays(date, -1))}
+              aria-label="Previous day"
+              className="flex h-9 w-8 items-center justify-center text-faint transition-colors hover:text-ink"
+            >
+              <Icon name="chevron" size={15} className="rotate-180" />
+            </button>
+            <span className="num min-w-[74px] text-center text-micro text-ink">
+              {date === today ? "today" : date.slice(5)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDate(addDays(date, 1))}
+              disabled={date >= today}
+              aria-label="Next day"
+              className="flex h-9 w-8 items-center justify-center text-faint transition-colors hover:text-ink disabled:opacity-30"
+            >
+              <Icon name="chevron" size={15} />
+            </button>
+          </div>
+        </div>
       </header>
 
       {doneCount === 0 ? (
@@ -180,17 +208,24 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
                 </span>
                 <button
                   type="button"
-                  onClick={() => patchBlock(b.id, { status: "carried" })}
+                  onClick={() => carryTo(b, addDays(date, 1))}
                   className="shrink-0 rounded-edge px-2.5 py-1.5 text-micro text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent-soft"
                 >
-                  Take it off
+                  Move on
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patchBlock(b.id, { status: "dropped" })}
+                  className="shrink-0 rounded-edge px-2.5 py-1.5 text-micro text-faint ring-1 ring-rule transition-colors hover:bg-sunk"
+                >
+                  Let go
                 </button>
               </li>
             ))}
           </ul>
           <p className="mt-3 text-micro text-faint">
-            Taking a block off clears it from today. It is not moved to
-            tomorrow — that would be a promise this app cannot keep yet.
+            Moving a block on puts it whole on the next day. Letting go closes
+            it here — the day is a record, and it should say what happened.
           </p>
         </section>
       )}

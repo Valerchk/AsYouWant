@@ -1,12 +1,19 @@
 "use client";
 
-import { formatClock, formatDuration } from "@/lib/time";
-import { Icon } from "@/components/icons/Icon";
 import Link from "next/link";
+import { formatClock, formatDuration, daysBetween, weekdayOf } from "@/lib/time";
+import { Icon } from "@/components/icons/Icon";
+import { WeekStrip } from "@/components/WeekStrip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Props {
+  /** The day on screen, which is no longer always today. */
+  date: string;
+  today: string;
   nowMin: number;
+  /** Blocks per day across the visible week, for the strip's marks. */
+  counts: Map<string, number>;
+  onPickDate: (day: string) => void;
   plannedMin: number;
   freeMin: number;
   blockCount: number;
@@ -18,11 +25,21 @@ interface Props {
   onOpenTemplates: () => void;
 }
 
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
-  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+/** "Today", "Tomorrow", or a date that names itself. */
+function titleFor(date: string, today: string): string {
+  const delta = daysBetween(today, date);
+  if (delta === 0) return "Today";
+  if (delta === 1) return "Tomorrow";
+  if (delta === -1) return "Yesterday";
+  const [, month, day] = date.split("-").map(Number);
+  return `${WEEKDAYS[weekdayOf(date)]} ${day} ${MONTHS[month - 1]}`;
+}
 
 function Metric({
   label,
@@ -44,7 +61,11 @@ function Metric({
 }
 
 export function DayHeader({
+  date,
+  today,
   nowMin,
+  counts,
+  onPickDate,
   plannedMin,
   freeMin,
   blockCount,
@@ -54,22 +75,29 @@ export function DayHeader({
   onConfirm,
   onOpenTemplates,
 }: Props) {
-  const now = new Date();
-  const stamp = `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  const isToday = date === today;
 
   return (
-    <header className="safe-top px-6 pt-7">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="num flex items-baseline gap-2.5 text-micro tracking-[0.18em] text-faint">
-            {stamp}
-            {/* The current time lives here rather than on the ribbon, where its
-                label kept colliding with the blocks' own start times. */}
-            <span className="tracking-normal text-accent">
+    <header className="safe-top px-6 pt-5">
+      <WeekStrip
+        date={date}
+        today={today}
+        counts={counts}
+        onPick={onPickDate}
+      />
+
+      <div className="mt-4 flex items-start justify-between">
+        <div className="min-w-0">
+          <h1 className="display text-title text-deep">
+            {titleFor(date, today)}
+          </h1>
+          {/* The clock belongs to today alone. Printing the current time over
+              Thursday's plan says something untrue about Thursday. */}
+          {isToday && (
+            <div className="num mt-1 text-micro tracking-[0.18em] text-accent">
               {formatClock(nowMin)}
-            </span>
-          </div>
-          <h1 className="display mt-1.5 text-title text-deep">Today</h1>
+            </div>
+          )}
         </div>
         <div className="-mr-2 flex items-center">
           <Link
@@ -101,7 +129,7 @@ export function DayHeader({
         </div>
       </div>
 
-      <div className="mt-6 flex items-end gap-7 border-t border-rule pt-4">
+      <div className="mt-5 flex items-end gap-7 border-t border-rule pt-4">
         <Metric label="blocks" value={String(blockCount)} />
         <Metric label="planned" value={formatDuration(plannedMin)} />
         <Metric label="free" value={formatDuration(freeMin)} tone="accent" />
@@ -115,7 +143,7 @@ export function DayHeader({
 
       {/* The morning ritual. Until the day is agreed to, the app stays quiet:
           no reminders are sent for a plan nobody signed off on. */}
-      {!confirmed && (
+      {!confirmed && isToday && (
         <button
           type="button"
           onClick={onConfirm}

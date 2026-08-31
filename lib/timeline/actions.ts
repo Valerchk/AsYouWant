@@ -50,3 +50,59 @@ export function reopenBlock(block: Block): Block {
     actualEndMin: null,
   };
 }
+
+/**
+ * Begin a block now.
+ *
+ * The clock the block is measured against becomes the real one: it is running
+ * from this minute, whatever the plan said, and it is what going long is
+ * measured from. Until this existed the app could describe a day but never
+ * witness one — `status: "active"` was unreachable, and with it every warning
+ * about running over.
+ */
+export function startBlock(block: Block, nowMin: number): Block {
+  return {
+    ...block,
+    status: "active",
+    actualStartMin: nowMin,
+    actualEndMin: null,
+  };
+}
+
+/**
+ * Put a running block down without finishing it.
+ *
+ * Used when another block is started while this one runs: the minutes it did
+ * get are real and are kept, so the day's record stays true. Reopening it
+ * puts it back in the plan.
+ */
+export function pauseBlock(block: Block, nowMin: number): Block {
+  const start = block.actualStartMin ?? nowMin;
+  return {
+    ...block,
+    status: "done",
+    actualStartMin: start,
+    actualEndMin: Math.max(start, nowMin),
+  };
+}
+
+/**
+ * The same block, ready to live on another day.
+ *
+ * Its routine is deliberately dropped: a carried copy that still claimed to
+ * belong to a routine would collide with the block that routine grows on the
+ * day it lands on, and one of the two would be refused by the database.
+ */
+export function carriedCopy(block: Block): Omit<Block, "id" | "sortOrder"> {
+  return {
+    title: block.title,
+    kind: block.kind,
+    startMin: block.startMin,
+    plannedMin: block.plannedMin,
+    status: "planned",
+    threadId: block.threadId,
+    actualStartMin: null,
+    actualEndMin: null,
+    routineId: null,
+  };
+}

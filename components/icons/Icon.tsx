@@ -57,6 +57,15 @@ const PATHS = {
     </>
   ),
 
+  /* Commit what is in the field. Points up because the composer sits at the
+     bottom of the screen and the day it feeds is above it. */
+  arrowUp: (
+    <>
+      <path d="M12 19V6" />
+      <path d="M6 12l6-6 6 6" />
+    </>
+  ),
+
   clock: (
     <>
       <path d="M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0" />

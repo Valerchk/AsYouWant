@@ -4,9 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Icon } from "@/components/icons/Icon";
+import { SendButton } from "@/components/SendButton";
 import { LoadFailure } from "@/components/LoadFailure";
 import { parseQuickAdd, DEFAULT_DURATION_MIN } from "@/lib/parse/quickAdd";
-import { formatClock, formatDuration } from "@/lib/time";
+import { formatClock, formatDuration, localDay } from "@/lib/time";
 import { relativeTime } from "@/lib/store/notes";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { useNotes } from "@/lib/data/useNotes";
@@ -23,13 +24,6 @@ import type { NoteData } from "@/lib/data/types";
 
    Neither touches the ribbon until you say so. */
 
-function localDay(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
-
 export default function Inbox() {
   const nowMin = useNowMin();
   if (nowMin === CLOCK_NOT_READY) return <main className="min-h-dvh bg-paper" />;
@@ -38,8 +32,9 @@ export default function Inbox() {
 
 function InboxScreen({ nowMin }: { nowMin: number }) {
   const router = useRouter();
+  const today = localDay();
   const { notes, loading, error, add, remove, setPlannedFor } = useNotes();
-  const { addBlock } = useDay(nowMin);
+  const { addBlock } = useDay(today, nowMin);
 
   const [draft, setDraft] = useState("");
   // Which list the new note joins. Defaults to today, because that is what
@@ -47,7 +42,6 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
   const [asIntention, setAsIntention] = useState(true);
   const [promoted, setPromoted] = useState<string | null>(null);
 
-  const today = localDay();
   const { intentions, someday } = useMemo(
     () => ({
       intentions: notes.filter((n) => n.plannedFor === today),
@@ -158,14 +152,20 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
 
       <div className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm">
         <form onSubmit={capture} className="mx-auto max-w-2xl px-6 py-3.5">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={asIntention ? "Today I want to…" : "Catch a thought…"}
-            enterKeyHint="done"
-            aria-label="Add"
-            className="w-full rounded-edge bg-sunk px-3 py-3 text-base text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/60 focus:shadow-lift focus:ring-accent/40"
-          />
+          <div className="relative">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={asIntention ? "Today I want to…" : "Catch a thought…"}
+              enterKeyHint="done"
+              aria-label="Add"
+              className="w-full rounded-edge bg-sunk py-3 pr-12 pl-3 text-base text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/60 focus:shadow-lift focus:ring-accent/40"
+            />
+            <SendButton
+              disabled={!draft.trim()}
+              label={asIntention ? "Add to today" : "Add to someday"}
+            />
+          </div>
           <div className="mt-2 flex gap-1.5">
             <Toggle active={asIntention} onClick={() => setAsIntention(true)}>
               Today

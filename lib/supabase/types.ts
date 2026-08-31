@@ -35,6 +35,8 @@ type ProfileRow = {
   quiet_from_min: number | null;
   quiet_to_min: number | null;
   require_confirm: boolean;
+  /** A read-only ICS subscription (migration 0004). Never written back to. */
+  calendar_url: string | null;
 }
 
 type ThreadRow = {
@@ -66,7 +68,22 @@ type BlockRow = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /** The routine this block grew from (migration 0004). */
+  routine_id: string | null;
 }
+
+type RoutineRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  kind: BlockKind;
+  start_min: number | null;
+  planned_min: number;
+  thread_id: string | null;
+  /** Bit per weekday, Sunday = bit 0. */
+  repeat_mask: number;
+  created_at: string;
+};
 
 type DayTemplateRow = {
   id: string;
@@ -128,8 +145,10 @@ export interface Database {
       blocks: Table<
         BlockRow,
         "id" | "status" | "sort_order" | "created_at" | "updated_at" |
-        "thread_id" | "actual_start_min" | "actual_end_min" | "carried_from"
+        "thread_id" | "actual_start_min" | "actual_end_min" | "carried_from" |
+        "routine_id"
       >;
+      routines: Table<RoutineRow, "id" | "created_at" | "kind" | "thread_id">;
       day_templates: Table<DayTemplateRow, "id" | "created_at">;
       notes: Table<NoteRow, "id" | "created_at" | "planned_for">;
       push_subscriptions: Table<

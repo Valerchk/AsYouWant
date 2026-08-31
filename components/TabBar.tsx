@@ -6,13 +6,15 @@ import { motion } from "motion/react";
 import { Icon, type IconName } from "@/components/icons/Icon";
 import { useNotes } from "@/lib/data/useNotes";
 
-/* Bottom tabs, in thumb reach. Threads and the evening review land here as
-   they arrive, which is why this is a bar and not a single toggle. */
+/* Bottom tabs, in thumb reach.
+
+   Two, not three. Goals used to sit here as a third, which made them read as
+   somewhere you had to go before planning anything; they now live on the day
+   itself, where you can see what they have had. */
 
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/today", label: "Today", icon: "flow" },
   { href: "/inbox", label: "Inbox", icon: "template" },
-  { href: "/threads", label: "Goals", icon: "thread" },
 ];
 
 export function TabBar() {

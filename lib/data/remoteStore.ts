@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
-import { toBlock, toThread } from "@/lib/blocks/mapper";
-import { dateInZone } from "@/lib/time";
+import { toBlock, toRoutine, toThread } from "@/lib/blocks/mapper";
+import { addDays, dateInZone, daysBetween } from "@/lib/time";
+import { repeatsOnDay, type RoutineInput } from "@/lib/routines";
 import { THREAD_COLOR_COUNT } from "@/lib/threads";
 import type { Block } from "@/lib/timeline/engine";
 import type { Database } from "@/lib/supabase/types";
@@ -8,18 +9,24 @@ import type {
   DayData,
   DayStore,
   DayTemplate,
+  ExportBundle,
   NewBlock,
   NoteData,
   NoteStore,
   TemplateBlock,
+  WeekSpend,
 } from "./types";
 
 type BlockUpdate = Database["public"]["Tables"]["blocks"]["Update"];
+type BlockInsert = Database["public"]["Tables"]["blocks"]["Insert"];
 
 /* Supabase implementation. Row level security scopes every query to the
    signed-in user, so no filter here is load-bearing for privacy — but the
    explicit user_id on writes is still required, because the column is NOT
    NULL and the policy checks it. */
+
+/** Two tabs opening the same day both try to grow the same routine. */
+const UNIQUE_VIOLATION = "23505";
 
 async function requireUser() {
   const supabase = createClient();
@@ -32,7 +39,12 @@ async function requireUser() {
 }
 
 /** Domain block → database columns. Only the fields a client may set. */
-function toRow(block: NewBlock, userId: string, day: string, sortOrder: number) {
+function toRow(
+  block: NewBlock,
+  userId: string,
+  day: string,
+  sortOrder: number,
+): BlockInsert {
   return {
     user_id: userId,
     day,
@@ -45,16 +57,30 @@ function toRow(block: NewBlock, userId: string, day: string, sortOrder: number) 
     actual_start_min: block.actualStartMin,
     actual_end_min: block.actualEndMin,
     sort_order: sortOrder,
+    routine_id: block.routineId ?? null,
   };
+}
+
+function spentOn(row: {
+  planned_min: number;
+  actual_start_min: number | null;
+  actual_end_min: number | null;
+}): number {
+  return row.actual_end_min !== null && row.actual_start_min !== null
+    ? row.actual_end_min - row.actual_start_min
+    : row.planned_min;
 }
 
 export function createRemoteDayStore(): DayStore {
   let userId = "";
-  let today = "";
-  let blockCount = 0;
+  let timezone = "UTC";
+
+  /** Today where the person is, not where the server is. */
+  const today = () => dateInZone(new Date(), timezone);
 
   return {
-    async load(): Promise<DayData> {
+    async load(day: string, nowMin: number): Promise<DayData> {
+      void nowMin;
       const { supabase, userId: uid } = await requireUser();
       userId = uid;
 
@@ -67,8 +93,7 @@ export function createRemoteDayStore(): DayStore {
       // The trigger on auth.users creates this row; if it is somehow missing,
       // fall back to sane defaults rather than failing to open the app.
       const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const timezone = profile?.timezone ?? browserZone;
-      today = dateInZone(new Date(), timezone);
+      timezone = profile?.timezone ?? browserZone ?? "UTC";
 
       // The column defaults to UTC, which would put "today" and every
       // reminder on the wrong clock for anyone who is not in it. Adopt the
@@ -79,41 +104,96 @@ export function createRemoteDayStore(): DayStore {
           .from("profiles")
           .update({ timezone: browserZone })
           .eq("id", uid);
-        today = dateInZone(new Date(), browserZone);
+        timezone = browserZone;
       }
 
-      const [blocksRes, threadsRes] = await Promise.all([
-        supabase.from("blocks").select("*").eq("user_id", uid).eq("day", today),
+      const [blocksRes, threadsRes, routinesRes] = await Promise.all([
+        supabase.from("blocks").select("*").eq("user_id", uid).eq("day", day),
         supabase
           .from("threads")
           .select("*")
           .eq("user_id", uid)
           .is("archived_at", null)
           .order("sort_order"),
+        supabase.from("routines").select("*").eq("user_id", uid),
       ]);
 
       if (blocksRes.error) throw new Error(blocksRes.error.message);
       if (threadsRes.error) throw new Error(threadsRes.error.message);
 
-      const blocks = (blocksRes.data ?? []).map(toBlock);
-      blockCount = blocks.length;
+      let blocks = (blocksRes.data ?? []).map(toBlock);
+
+      /* Grow whatever routines belong on this day and have not grown yet.
+         Only ever forward from today: backfilling history would invent a gym
+         session you never went to and then count it in the week's totals. */
+      const routines = (routinesRes.data ?? []).map(toRoutine);
+      if (daysBetween(today(), day) >= 0) {
+        const already = new Set(blocks.map((b) => b.routineId));
+        const missing = routines.filter(
+          (r) => repeatsOnDay(r.repeatMask, day) && !already.has(r.id),
+        );
+
+        if (missing.length > 0) {
+          const rows = missing.map((r, i) =>
+            toRow(
+              {
+                title: r.title,
+                kind: r.kind,
+                startMin: r.startMin,
+                plannedMin: r.plannedMin,
+                status: "planned",
+                threadId: r.threadId,
+                actualStartMin: null,
+                actualEndMin: null,
+                routineId: r.id,
+              },
+              uid,
+              day,
+              blocks.length + i + 1,
+            ),
+          );
+
+          const grown = await supabase.from("blocks").insert(rows).select();
+          if (grown.error && grown.error.code !== UNIQUE_VIOLATION) {
+            throw new Error(grown.error.message);
+          }
+          if (grown.error) {
+            // Another tab got there first. Its rows are the real ones.
+            const again = await supabase
+              .from("blocks")
+              .select("*")
+              .eq("user_id", uid)
+              .eq("day", day);
+            blocks = (again.data ?? []).map(toBlock);
+          } else {
+            blocks = [...blocks, ...(grown.data ?? []).map(toBlock)];
+          }
+        }
+      }
 
       return {
-        date: today,
+        date: day,
         blocks,
         threads: (threadsRes.data ?? []).map(toThread),
-        confirmed: profile?.day_confirmed_on === today,
+        confirmed: profile?.day_confirmed_on === day,
         dayStartMin: profile?.day_start_min ?? 8 * 60,
         dayEndMin: profile?.day_end_min ?? 22 * 60,
       };
     },
 
-    async addBlock(block: NewBlock): Promise<Block> {
+    async addBlock(block: NewBlock, day: string): Promise<Block> {
       const supabase = createClient();
-      blockCount += 1;
+      // Counted per day rather than kept in a variable: the app can now be
+      // adding to tomorrow while today is on screen.
+      const { count } = await supabase
+        .from("blocks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("day", day);
+
       const { data, error } = await supabase
         .from("blocks")
-        .insert(toRow(block, userId, today, blockCount))
+        .insert(toRow(block, userId, day, (count ?? 0) + 1))
         .select()
         .single();
 
@@ -132,6 +212,8 @@ export function createRemoteDayStore(): DayStore {
       if (patch.plannedMin !== undefined) row.planned_min = patch.plannedMin;
       if (patch.kind !== undefined) row.kind = patch.kind;
       if (patch.threadId !== undefined) row.thread_id = patch.threadId;
+      if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+      if (patch.routineId !== undefined) row.routine_id = patch.routineId;
       if (patch.actualStartMin !== undefined) {
         row.actual_start_min = patch.actualStartMin;
       }
@@ -143,11 +225,22 @@ export function createRemoteDayStore(): DayStore {
       if (error) throw new Error(error.message);
     },
 
-    async confirmDay() {
+    async reorderFlow(ids) {
+      const supabase = createClient();
+      const results = await Promise.all(
+        ids.map((id, i) =>
+          supabase.from("blocks").update({ sort_order: i + 1 }).eq("id", id),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw new Error(failed.error.message);
+    },
+
+    async confirmDay(day) {
       const supabase = createClient();
       const { error } = await supabase
         .from("profiles")
-        .update({ day_confirmed_on: today })
+        .update({ day_confirmed_on: day })
         .eq("id", userId);
       if (error) throw new Error(error.message);
     },
@@ -211,6 +304,99 @@ export function createRemoteDayStore(): DayStore {
       if (error) throw new Error(error.message);
     },
 
+    async loadWeek(endDay): Promise<WeekSpend> {
+      const supabase = createClient();
+      const fromDay = addDays(endDay, -6);
+
+      const { data, error } = await supabase
+        .from("blocks")
+        .select("day, thread_id, planned_min, actual_start_min, actual_end_min, status")
+        .eq("user_id", userId)
+        .gte("day", fromDay)
+        .lte("day", endDay);
+
+      if (error) throw new Error(error.message);
+
+      const totals = new Map<string, number>();
+      const perDay = new Map<string, Map<string, number>>();
+
+      for (const row of data ?? []) {
+        if (!row.thread_id || row.status !== "done") continue;
+        const spent = spentOn(row);
+        totals.set(row.thread_id, (totals.get(row.thread_id) ?? 0) + spent);
+
+        const bucket = perDay.get(row.day) ?? new Map<string, number>();
+        bucket.set(row.thread_id, (bucket.get(row.thread_id) ?? 0) + spent);
+        perDay.set(row.day, bucket);
+      }
+
+      return {
+        totals,
+        days: Array.from({ length: 7 }, (_, i) => {
+          const date = addDays(fromDay, i);
+          return { date, byThread: perDay.get(date) ?? new Map() };
+        }),
+      };
+    },
+
+    async loadCounts(fromDay, toDay) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("blocks")
+        .select("day, status")
+        .eq("user_id", userId)
+        .gte("day", fromDay)
+        .lte("day", toDay);
+
+      if (error) throw new Error(error.message);
+
+      const counts = new Map<string, number>();
+      for (const row of data ?? []) {
+        if (row.status === "dropped" || row.status === "carried") continue;
+        counts.set(row.day, (counts.get(row.day) ?? 0) + 1);
+      }
+      return counts;
+    },
+
+    async listRoutines() {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("routines")
+        .select("*")
+        .eq("user_id", userId);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(toRoutine);
+    },
+
+    async saveRoutine(input: RoutineInput, id?: string) {
+      const supabase = createClient();
+      const row = {
+        user_id: userId,
+        title: input.title,
+        kind: input.kind,
+        start_min: input.startMin,
+        planned_min: input.plannedMin,
+        thread_id: input.threadId,
+        repeat_mask: input.repeatMask,
+      };
+
+      const query = id
+        ? supabase.from("routines").update(row).eq("id", id).select().single()
+        : supabase.from("routines").insert(row).select().single();
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return toRoutine(data);
+    },
+
+    async deleteRoutine(id) {
+      const supabase = createClient();
+      // The blocks it already grew keep their days; the foreign key is
+      // ON DELETE SET NULL, so they simply stop belonging to a routine.
+      const { error } = await supabase.from("routines").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+
     async listTemplates(): Promise<DayTemplate[]> {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -255,31 +441,45 @@ export function createRemoteDayStore(): DayStore {
       if (error) throw new Error(error.message);
     },
 
-    async loadWeek() {
-      const supabase = createClient();
-      const from = new Date();
-      from.setDate(from.getDate() - 6);
-      const fromDay = from.toISOString().slice(0, 10);
+    async exportAll(): Promise<ExportBundle> {
+      const { supabase, userId: uid } = await requireUser();
 
-      const { data, error } = await supabase
-        .from("blocks")
-        .select("thread_id, planned_min, actual_start_min, actual_end_min, status")
-        .eq("user_id", userId)
-        .gte("day", fromDay);
+      const [blocks, threads, routines, templates, notes] = await Promise.all([
+        supabase.from("blocks").select("*").eq("user_id", uid).order("day"),
+        supabase.from("threads").select("*").eq("user_id", uid),
+        supabase.from("routines").select("*").eq("user_id", uid),
+        supabase.from("day_templates").select("*").eq("user_id", uid),
+        supabase.from("notes").select("*").eq("user_id", uid),
+      ]);
 
-      if (error) throw new Error(error.message);
-
-      const totals = new Map<string, number>();
-      for (const row of data ?? []) {
-        if (!row.thread_id || row.status !== "done") continue;
-        // What it actually took, falling back to what was planned.
-        const spent =
-          row.actual_end_min !== null && row.actual_start_min !== null
-            ? row.actual_end_min - row.actual_start_min
-            : row.planned_min;
-        totals.set(row.thread_id, (totals.get(row.thread_id) ?? 0) + spent);
+      const byDay = new Map<string, Block[]>();
+      for (const row of blocks.data ?? []) {
+        const list = byDay.get(row.day) ?? [];
+        list.push(toBlock(row));
+        byDay.set(row.day, list);
       }
-      return totals;
+
+      return {
+        exportedAt: new Date().toISOString(),
+        threads: (threads.data ?? []).map(toThread),
+        routines: (routines.data ?? []).map(toRoutine),
+        templates: (templates.data ?? []).map((row) => ({
+          id: row.id,
+          name: row.name,
+          blocks: Array.isArray(row.payload)
+            ? (row.payload as TemplateBlock[])
+            : [],
+        })),
+        notes: (notes.data ?? []).map((r) => ({
+          id: r.id,
+          text: r.text,
+          createdAt: new Date(r.created_at).getTime(),
+          plannedFor: r.planned_for,
+        })),
+        days: Array.from(byDay.entries())
+          .map(([date, list]) => ({ date, blocks: list }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
+      };
     },
   };
 }

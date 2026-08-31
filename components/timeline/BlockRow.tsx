@@ -9,6 +9,11 @@ import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
 import { CLOCK_W, RAIL_W, RIBBON_SPRING } from "./motion";
 
+export interface DragPreview {
+  min: number;
+  mode: "time" | "insert";
+}
+
 interface Props {
   segment: BlockSegment;
   /** Used to show how far through the running block we are. */
@@ -16,14 +21,21 @@ interface Props {
   thread: Thread | null;
   /** Minutes this block handed back by finishing early. */
   slackMin: number;
+  /** True for the one block that may be started right now. */
+  startable: boolean;
   onToggleDone: (blockId: string) => void;
+  onStart: (blockId: string) => void;
   onOpen: (blockId: string) => void;
+  /** Tapping the goal's mark opens the goal, not the block. */
+  onOpenThread: (threadId: string) => void;
   /** Pixel offset → the minute it lands on. Non-linear, so it comes from
       geometry rather than from dividing by a scale factor. */
   minuteAt: (offsetY: number) => number;
+  /** An anchor was dragged to a time. */
   onMove: (blockId: string, startMin: number) => void;
-  /** Reports the minute under the handle while dragging, null when idle. */
-  onDragPreview: (startMin: number | null) => void;
+  /** A flow block was dragged to a place in the queue. */
+  onReorder: (blockId: string, targetMin: number) => void;
+  onDragPreview: (preview: DragPreview | null) => void;
 }
 
 export function BlockRow({
@@ -31,19 +43,34 @@ export function BlockRow({
   nowMin,
   thread,
   slackMin,
+  startable,
   onToggleDone,
+  onStart,
   onOpen,
+  onOpenThread,
   minuteAt,
   onMove,
+  onReorder,
   onDragPreview,
 }: Props) {
   const { placed, top, height } = segment;
   const { block, isRunning, isMissed, overrunMin } = placed;
   const done = block.status === "done";
 
+  // Someone else's record of your day: it holds its hour so free time stays
+  // honest, and nothing here may change it.
+  const external = block.external === true;
+
   // Finished and running blocks are history: dragging them would rewrite what
   // already happened. Only what is still planned can be moved.
-  const draggable = block.status === "planned";
+  const draggable = block.status === "planned" && !external;
+
+  /* An anchor lives on the clock, so dragging it changes when. A flow block
+     lives in a queue, so dragging it changes the order — which is the whole
+     point of a flow block, and used to be impossible: the gesture pinned it
+     to a time and it stopped flowing forever. */
+  const dragMode: DragPreview["mode"] =
+    block.kind === "anchor" ? "time" : "insert";
 
   // The block that owns this minute. The now-line no longer crosses the
   // titles, so the current block has to say so itself.
@@ -122,7 +149,7 @@ export function BlockRow({
         <div className="num pt-3 pr-2.5 text-right text-micro leading-5">
           <span
             className={
-              isRunning ? "text-accent" : done ? "text-faint" : "text-ink"
+              isRunning ? "text-accent" : done || external ? "text-faint" : "text-ink"
             }
           >
             {formatClock(placed.startMin)}
@@ -134,95 +161,150 @@ export function BlockRow({
           <div
             className="absolute top-0 bottom-0 left-1/2 w-[3px] -translate-x-1/2"
             style={{
-              background: accent,
+              background: external ? "none" : accent,
+              backgroundImage: external
+                ? "repeating-linear-gradient(to bottom, var(--color-rule) 0 4px, transparent 4px 8px)"
+                : undefined,
               opacity: done ? 0.3 : isMissed ? 0.35 : 0.9,
             }}
           />
 
-          <button
-            type="button"
-            onClick={() => onToggleDone(block.id)}
-            aria-label={
-              done ? `Reopen ${block.title}` : `Complete ${block.title}`
-            }
-            aria-pressed={done}
-            // Centred on the first line of text and sized for a thumb. z-20
-            // keeps it above the neighbouring segment, which would otherwise
-            // take the tap where the two areas meet.
-            className="absolute left-1/2 z-20 flex h-10 w-10 -translate-x-1/2 items-center justify-center"
-            style={{ top: 2 }}
-          >
-            <motion.span
-              className="flex h-[18px] w-[18px] items-center justify-center rounded-plate"
-              animate={{ scale: done ? 1 : 0.92 }}
-              whileTap={{ scale: 0.82 }}
-              transition={{ type: "spring", stiffness: 500, damping: 24 }}
-              style={{
-                background: done ? accent : "var(--color-paper)",
-                boxShadow: `inset 0 0 0 1.5px ${
-                  isMissed ? "var(--color-over)" : accent
-                }`,
-              }}
+          {!external && (
+            <button
+              type="button"
+              onClick={() => onToggleDone(block.id)}
+              aria-label={
+                done ? `Reopen ${block.title}` : `Complete ${block.title}`
+              }
+              aria-pressed={done}
+              // Centred on the first line of text and sized for a thumb. z-20
+              // keeps it above the neighbouring segment, which would otherwise
+              // take the tap where the two areas meet.
+              className="absolute left-1/2 z-20 flex h-10 w-10 -translate-x-1/2 items-center justify-center"
+              style={{ top: 2 }}
             >
-              {done && <Icon name="check" size={11} className="text-paper" />}
-            </motion.span>
-            {isRunning && (
-              <span
-                className="pulse-ring pointer-events-none absolute h-[18px] w-[18px] rounded-plate"
-                style={{ boxShadow: `0 0 0 1.5px ${accent}` }}
-              />
-            )}
-          </button>
+              <motion.span
+                className="flex h-[18px] w-[18px] items-center justify-center rounded-plate"
+                animate={{ scale: done ? 1 : 0.92 }}
+                whileTap={{ scale: 0.82 }}
+                transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                style={{
+                  background: done ? accent : "var(--color-paper)",
+                  boxShadow: `inset 0 0 0 1.5px ${
+                    isMissed ? "var(--color-over)" : accent
+                  }`,
+                }}
+              >
+                {done && <Icon name="check" size={11} className="text-paper" />}
+              </motion.span>
+              {isRunning && (
+                <span
+                  className="pulse-ring pointer-events-none absolute h-[18px] w-[18px] rounded-plate"
+                  style={{ boxShadow: `0 0 0 1.5px ${accent}` }}
+                />
+              )}
+            </button>
+          )}
         </div>
 
         {/* body — opens the sheet. The marker sits above this at z-20, so
-            closing a block never accidentally opens its editor. */}
-        <button
-          type="button"
-          onClick={() => {
-            if (!moved.current) onOpen(block.id);
-          }}
-          className="min-w-0 pt-3 pr-2 text-left"
-        >
+            closing a block never accidentally opens its editor.
+
+            The tap area is a button behind the text rather than around it,
+            because the goal's mark and the start control inside need to be
+            their own buttons and HTML will not nest one button in another.
+            Everything above it is transparent to taps except those. */}
+        <div className="relative min-w-0 pt-3 pr-2">
+          {!external && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!moved.current) onOpen(block.id);
+              }}
+              aria-label={`Open ${block.title}`}
+              className="absolute inset-0"
+            />
+          )}
+
           <div
-            className={`truncate text-lede leading-5 ${
-              done ? "text-faint" : isRunning ? "text-deep" : "text-ink"
+            className={`pointer-events-none relative truncate text-lede leading-5 ${
+              done || external ? "text-faint" : isRunning ? "text-deep" : "text-ink"
             }`}
           >
             {block.title}
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-fine leading-none">
-            {thread && (
-              <span className="flex min-w-0 items-center gap-1.5 text-faint">
-                {isGoalIcon(thread.icon) ? (
-                  <GoalIcon
-                    name={thread.icon}
-                    size={13}
-                    className="shrink-0"
-                    style={{ color: colour }}
-                  />
-                ) : (
-                  <span
-                    className="inline-block h-[2px] w-3 shrink-0"
-                    style={{ background: colour }}
-                  />
-                )}
-                <span className="truncate">{thread.name}</span>
+          <div className="pointer-events-none relative mt-1.5 flex items-center gap-2 text-fine leading-none">
+            {external ? (
+              <span className="flex items-center gap-1.5 text-faint">
+                <Icon name="crossSection" size={12} className="shrink-0" />
+                <span className="truncate">calendar</span>
               </span>
+            ) : (
+              thread && (
+                <button
+                  type="button"
+                  onClick={() => onOpenThread(thread.id)}
+                  aria-label={`Open ${thread.name}`}
+                  className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-faint transition-colors hover:text-ink"
+                >
+                  {isGoalIcon(thread.icon) ? (
+                    <GoalIcon
+                      name={thread.icon}
+                      size={13}
+                      className="shrink-0"
+                      style={{ color: colour }}
+                    />
+                  ) : (
+                    <span
+                      className="inline-block h-[2px] w-3 shrink-0"
+                      style={{ background: colour }}
+                    />
+                  )}
+                  <span className="truncate">{thread.name}</span>
+                </button>
+              )
             )}
+
             {isMissed && <span className="shrink-0 text-over">missed</span>}
             {isRunning && overrunMin > 0 && (
               <span className="num shrink-0 text-over">
                 {formatDuration(overrunMin)} over
               </span>
             )}
+
+            {/* The verb the app was missing. It appears on the one block that
+                owns this minute, so the ribbon never carries more than one. */}
+            {startable && (
+              <button
+                type="button"
+                onClick={() => onStart(block.id)}
+                className="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-edge bg-accent-soft px-2 py-1 text-micro text-accent ring-1 ring-accent/40 transition-colors hover:bg-accent hover:text-paper"
+              >
+                <svg width="9" height="10" viewBox="0 0 9 10" fill="none" aria-hidden>
+                  <path
+                    d="M1 1v8l7-4z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="miter"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+                Start
+              </button>
+            )}
+
+            {isRunning && (
+              <span className="num ml-auto shrink-0 text-micro text-accent">
+                {formatDuration(Math.max(0, nowMin - placed.startMin))} in
+              </span>
+            )}
           </div>
-        </button>
+        </div>
 
         {/* duration, what the block gave back, and the drag handle */}
         <div className="flex flex-col items-end gap-1 pt-3">
           <div className="flex items-center gap-1.5">
-            {block.kind === "anchor" && (
+            {block.kind === "anchor" && !external && (
               <Icon
                 name="anchor"
                 size={13}
@@ -231,10 +313,10 @@ export function BlockRow({
             )}
             <span
               className={`num text-micro leading-5 ${
-                done ? "text-faint" : "text-ink"
+                done || external ? "text-faint" : "text-ink"
               }`}
             >
-              {formatDuration(block.plannedMin)}
+              {formatDuration(placed.endMin - placed.startMin)}
             </span>
 
             {/* Dragging is a deliberate grab, not something the whole row
@@ -243,7 +325,11 @@ export function BlockRow({
             {draggable && (
               <motion.button
                 type="button"
-                aria-label={`Move ${block.title}`}
+                aria-label={
+                  dragMode === "time"
+                    ? `Move ${block.title} to another time`
+                    : `Reorder ${block.title}`
+                }
                 className="-mr-1 flex h-9 w-7 cursor-grab touch-none items-center justify-center text-faint active:cursor-grabbing"
                 drag="y"
                 dragMomentum={false}
@@ -255,13 +341,15 @@ export function BlockRow({
                 onDrag={(_, info) => {
                   const m = Math.round(minuteAt(info.offset.y) / 15) * 15;
                   setDragMin(m);
-                  onDragPreview(m);
+                  onDragPreview({ min: m, mode: dragMode });
                 }}
                 onDragEnd={(_, info) => {
                   // Fifteen minutes, not five: five is about seven pixels on a
                   // phone, which no thumb can aim at.
                   const raw = minuteAt(info.offset.y);
-                  onMove(block.id, Math.round(raw / 15) * 15);
+                  const target = Math.round(raw / 15) * 15;
+                  if (dragMode === "time") onMove(block.id, target);
+                  else onReorder(block.id, target);
                   setDragMin(null);
                   onDragPreview(null);
                   setTimeout(() => {

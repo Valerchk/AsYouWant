@@ -18,7 +18,9 @@ import { THREAD_COLOR_COUNT } from "@/lib/threads";
 
 export async function GET(request: NextRequest) {
   const { origin, searchParams } = request.nextUrl;
-  const q = searchParams.get("q")?.trim();
+  // Capped before anything reads it: this arrives from a Shortcut, a URL bar,
+  // or a link someone was sent, and a title has no business being longer.
+  const q = searchParams.get("q")?.trim().slice(0, 300);
 
   if (!q) return NextResponse.redirect(`${origin}/today`);
 

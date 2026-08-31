@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toBlock, toThread } from "@/lib/blocks/mapper";
@@ -23,6 +24,22 @@ import { dateInZone, minutesInZone } from "@/lib/time";
    ========================================================================== */
 
 export const maxDuration = 60;
+export const runtime = "nodejs";
+
+/**
+ * Constant-time comparison of the shared secret.
+ *
+ * `!==` returns as soon as two bytes differ, and the time it took says how
+ * many characters were right. Hashing first makes both inputs the same
+ * length, which timingSafeEqual requires and which also stops the length of
+ * the guess from leaking.
+ */
+function secretMatches(presented: string | null, expected: string): boolean {
+  if (!presented) return false;
+  const a = createHash("sha256").update(presented).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 
 interface TickReport {
   scanned: number;
@@ -37,7 +54,7 @@ export async function POST(request: NextRequest) {
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 500 });
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secretMatches(request.headers.get("authorization"), `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

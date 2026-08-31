@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Temporary local store.
+   Browser-storage vault.
    --------------------------------------------------------------------------
    Stands in for Supabase until the database is connected, so the app can be
    used and judged as an app rather than as a demo that forgets everything on
@@ -8,19 +8,31 @@
    Reached only through lib/data/localStore.ts, which implements the same
    DayStore interface as the Supabase version — so the screens never learn
    which one is answering.
+
+   v2 holds many days. v1 held exactly one, which was the storage-shaped
+   reason the app could not show tomorrow. The old key is left untouched
+   rather than migrated: it can only ever contain a single day that has since
+   passed, and reading it would mean carrying a dead shape forever.
    ========================================================================== */
 
 import type { Block } from "@/lib/timeline/engine";
 import type { Thread } from "@/lib/threads";
+import type { Routine } from "@/lib/routines";
+import type { DayTemplate } from "@/lib/data/types";
+import { localDay } from "@/lib/time";
 
-const KEY = "ayw.day.v1";
+const KEY = "ayw.vault.v2";
 
-export interface DayState {
-  /** YYYY-MM-DD the state belongs to, so a new day reseeds. */
-  date: string;
+export interface StoredDay {
   blocks: Block[];
-  threads: Thread[];
   confirmed: boolean;
+}
+
+export interface Vault {
+  threads: Thread[];
+  routines: Routine[];
+  templates: DayTemplate[];
+  days: Record<string, StoredDay>;
 }
 
 export const DAY_START_MIN = 8 * 60;
@@ -41,19 +53,12 @@ export function dayWindow(nowMin: number): { start: number; end: number } {
   };
 }
 
-const THREADS: Thread[] = [
+const SEED_THREADS: Thread[] = [
   { id: "t1", name: "Thesis", colorIndex: 0 },
   { id: "t2", name: "Work", colorIndex: 3 },
   { id: "t3", name: "Health", colorIndex: 2 },
   { id: "t4", name: "Reading", colorIndex: 5 },
 ];
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 let counter = 0;
 
@@ -92,7 +97,7 @@ function make(over: Partial<Block>): Block {
 /**
  * A believable day built around the current moment, so the ribbon shows every
  * state it can be in — finished early, running, anchored, still to come —
- * whatever time it happens to be opened.
+ * whatever time it happens to be opened. Laid down once, on first run.
  */
 export function seedDay(nowMin: number): Block[] {
   const blocks: Block[] = [];
@@ -172,40 +177,45 @@ export function seedDay(nowMin: number): Block[] {
   return blocks;
 }
 
-export function loadDay(nowMin: number): DayState {
-  const fresh: DayState = {
-    date: todayKey(),
-    blocks: seedDay(nowMin),
-    threads: THREADS,
-    confirmed: false,
+function freshVault(nowMin: number): Vault {
+  return {
+    threads: SEED_THREADS,
+    routines: [],
+    templates: [],
+    days: { [localDay()]: { blocks: seedDay(nowMin), confirmed: false } },
   };
+}
 
-  if (typeof window === "undefined") return fresh;
+export function loadVault(nowMin: number): Vault {
+  if (typeof window === "undefined") return freshVault(nowMin);
 
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (!raw) return fresh;
-    const parsed = JSON.parse(raw) as DayState;
-    // A stored day from yesterday is not this day.
-    if (parsed.date !== fresh.date) return fresh;
-    return { ...fresh, ...parsed, threads: parsed.threads ?? THREADS };
+    if (!raw) return freshVault(nowMin);
+    const parsed = JSON.parse(raw) as Partial<Vault>;
+    return {
+      threads: parsed.threads ?? SEED_THREADS,
+      routines: parsed.routines ?? [],
+      templates: parsed.templates ?? [],
+      days: parsed.days ?? {},
+    };
   } catch {
     // Corrupt or unreadable storage should never block the app from opening.
-    return fresh;
+    return freshVault(nowMin);
   }
 }
 
-export function saveDay(state: DayState): void {
+export function saveVault(vault: Vault): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(state));
+    window.localStorage.setItem(KEY, JSON.stringify(vault));
   } catch {
     // Private mode, or the quota is full. Losing persistence is survivable;
     // throwing here would not be.
   }
 }
 
-export function resetDay(): void {
+export function resetVault(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(KEY);

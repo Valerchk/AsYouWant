@@ -1,3 +1,7 @@
+// Importing this file from a Client Component is now a build error rather
+// than a runtime one. The key it reads bypasses every row level security
+// policy in the database, so the failure has to happen before anything ships.
+import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { supabaseSecretKey, supabaseUrl } from "./env";
 import type { Database } from "./types";

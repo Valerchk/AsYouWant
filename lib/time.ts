@@ -49,3 +49,48 @@ export function dateInZone(at: Date, timeZone: string): string {
     day: "2-digit",
   }).format(at);
 }
+
+/* ==========================================================================
+   Calendar dates.
+   --------------------------------------------------------------------------
+   A day is the string "YYYY-MM-DD" and nothing else. Arithmetic on it goes
+   through UTC deliberately: adding 86 400 000 ms to a local Date lands on the
+   same calendar day twice a year, on the mornings the clocks change, and a
+   planner that skips or repeats a day on those two mornings is broken in the
+   way nobody notices until it happens to them.
+   ========================================================================== */
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Today where this device is standing. */
+export function localDay(at: Date = new Date()): string {
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
+
+export function addDays(day: string, delta: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d) + delta * 86_400_000);
+  return `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`;
+}
+
+/** 0 = Sunday, matching Date#getDay and the routine bitmask. */
+export function weekdayOf(day: string): number {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Whole days from `from` to `to`; negative when `to` is earlier. */
+export function daysBetween(from: string, to: string): number {
+  const at = (day: string) => {
+    const [y, m, d] = day.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((at(to) - at(from)) / 86_400_000);
+}
+
+/** The seven days of `day`'s week, Monday first. */
+export function weekOf(day: string): string[] {
+  const offset = (weekdayOf(day) + 6) % 7;
+  const monday = addDays(day, -offset);
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}

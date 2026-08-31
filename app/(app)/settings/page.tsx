@@ -5,7 +5,7 @@ import { LoadFailure } from "@/components/LoadFailure";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatClock, formatDuration } from "@/lib/time";
 import { createClient } from "@/lib/supabase/client";
-import { usingDatabase } from "@/lib/data";
+import { dayStore, usingDatabase } from "@/lib/data";
 import type { Database } from "@/lib/supabase/types";
 
 /* Preferences that used to be constants in the source.
@@ -25,6 +25,7 @@ interface Prefs {
   notifyLeadMin: number;
   quietFromMin: number | null;
   quietToMin: number | null;
+  calendarUrl: string | null;
 }
 
 const LEAD_CHOICES = [0, 5, 10, 15, 30];
@@ -64,6 +65,7 @@ export default function Settings() {
           notifyLeadMin: data.notify_lead_min,
           quietFromMin: data.quiet_from_min,
           quietToMin: data.quiet_to_min,
+          calendarUrl: data.calendar_url,
         });
       })
       .catch((e: unknown) =>
@@ -91,6 +93,7 @@ export default function Settings() {
     if (next.notifyLeadMin !== undefined) row.notify_lead_min = next.notifyLeadMin;
     if (next.quietFromMin !== undefined) row.quiet_from_min = next.quietFromMin;
     if (next.quietToMin !== undefined) row.quiet_to_min = next.quietToMin;
+    if (next.calendarUrl !== undefined) row.calendar_url = next.calendarUrl;
 
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -233,7 +236,146 @@ export default function Settings() {
           </Row>
         )}
       </Group>
+
+      <Group title="Your calendar">
+        <CalendarField
+          value={prefs.calendarUrl}
+          onChange={(url) => patch({ calendarUrl: url })}
+        />
+      </Group>
+
+      <Group title="Your data">
+        <ExportRow />
+      </Group>
     </main>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/* A calendar subscription, read-only.
+
+   Without it the ribbon says three hours are free while a meeting sits in
+   somebody else's app at two o'clock, and free time that is not free is the
+   one lie that makes a planner untrustworthy. */
+function CalendarField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [state, setState] = useState<"idle" | "checking" | "ok" | string>("idle");
+
+  async function save() {
+    const url = draft.trim();
+    if (!url) {
+      onChange(null);
+      setState("idle");
+      return;
+    }
+
+    setState("checking");
+    onChange(url);
+    // Asking the server is the only honest confirmation: it is the one that
+    // has to resolve the host, and it is where a bad address is refused.
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/calendar?day=${today}`);
+      const data = (await res.json()) as { error?: string; events?: unknown[] };
+      setState(data.error ?? "ok");
+    } catch {
+      setState("Could not reach the calendar.");
+    }
+  }
+
+  return (
+    <div className="border-b border-grid py-3.5">
+      <div className="text-base text-ink">Subscription address</div>
+      <p className="mt-0.5 text-micro text-faint">
+        The secret iCal address from Google, Apple or Outlook. Events appear on
+        the ribbon so free time stays honest. Read-only — nothing is ever
+        written back, and nothing is stored.
+      </p>
+      <div className="mt-2.5 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+          }}
+          placeholder="https://calendar.google.com/…/basic.ics"
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-label="Calendar subscription address"
+          className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
+        />
+        <button
+          type="button"
+          onClick={() => void save()}
+          className="shrink-0 rounded-edge bg-accent px-3 py-2 text-fine text-paper"
+        >
+          {state === "checking" ? "…" : "Use"}
+        </button>
+      </div>
+      {state !== "idle" && state !== "checking" && (
+        <p
+          className={`mt-2 text-micro ${state === "ok" ? "text-accent" : "text-over"}`}
+        >
+          {state === "ok" ? "Reading it." : state}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* Everything the account holds, in one file. An app that keeps your days
+   should never be the only place they exist. */
+function ExportRow() {
+  const [state, setState] = useState<"idle" | "working" | "done" | "failed">(
+    "idle",
+  );
+
+  async function download() {
+    setState("working");
+    try {
+      const bundle = await dayStore().exportAll();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `as-you-want-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setState("done");
+    } catch {
+      setState("failed");
+    }
+  }
+
+  return (
+    <div className="flex items-start gap-4 border-b border-grid py-3.5">
+      <div className="min-w-0 flex-1">
+        <div className="text-base text-ink">Download everything</div>
+        <div className="mt-0.5 text-micro text-faint">
+          {state === "failed"
+            ? "That did not work. Try again on a wider screen."
+            : "Every day, goal, routine and note, as one JSON file."}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => void download()}
+        className="shrink-0 rounded-edge px-3 py-2 text-fine text-ink ring-1 ring-rule transition-colors hover:bg-sunk"
+      >
+        {state === "working" ? "…" : state === "done" ? "Saved" : "Export"}
+      </button>
+    </div>
   );
 }
 

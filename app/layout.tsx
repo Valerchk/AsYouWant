@@ -2,6 +2,18 @@ import type { Metadata, Viewport } from "next";
 import { Unbounded, Onest, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
+/* Rendered per request, so the content policy can be nonce-based.
+ *
+ * Next stamps its own inline scripts — the streamed RSC payload on every page
+ * — with the nonce it finds on the request. A prerendered page is written
+ * once at build time and cannot carry a per-request value, so under a strict
+ * policy its inline scripts are simply blocked and the page never hydrates.
+ * Verified the hard way: the markup arrived and nothing worked.
+ *
+ * The cost is the landing page losing its static cache. Every other route is
+ * behind sign-in and was never cacheable anyway. */
+export const dynamic = "force-dynamic";
+
 const unbounded = Unbounded({
   variable: "--font-unbounded",
   subsets: ["latin"],
@@ -83,12 +95,14 @@ export default function RootLayout({
             It sits at the top of <body> rather than in a hand-written <head>:
             the App Router builds the head itself, and a manual one there
             fights hydration. The browser still runs this before painting any
-            of the content below it. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("ayw.theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`,
-          }}
-        />
+            of the content below it.
+
+            Its source lives in public/theme.js so the content security policy
+            can refuse inline script outright — see lib/security.ts. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts -- blocking is
+            the entire purpose: deferred, it would run after the first paint
+            and the flash it exists to prevent would happen anyway. */}
+        <script src="/theme.js" />
         {children}
       </body>
     </html>

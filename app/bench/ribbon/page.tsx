@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Ribbon } from "@/components/timeline/Ribbon";
-import { QuickAdd } from "@/components/QuickAdd";
+import { Composer } from "@/components/Composer";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
@@ -17,7 +17,7 @@ import { newId } from "@/lib/store/local";
 const DAY_START = 8 * 60;
 const DAY_END = 22 * 60;
 
-const THREADS: Thread[] = [
+const SEED_THREADS: Thread[] = [
   { id: "t1", name: "Thesis", colorIndex: 0 },
   { id: "t2", name: "Work", colorIndex: 3 },
   { id: "t3", name: "Health", colorIndex: 2 },
@@ -89,6 +89,7 @@ const SEED: Block[] = [
 
 export default function RibbonBench() {
   const [blocks, setBlocks] = useState<Block[]>(SEED);
+  const [threads, setThreads] = useState<Thread[]>(SEED_THREADS);
   const [nowMin, setNowMin] = useState(9 * 60 + 20);
 
   const result = layout(blocks, {
@@ -120,10 +121,10 @@ export default function RibbonBench() {
     );
   }
 
-  function add(input: string) {
+  function add(input: string, threadId: string | null) {
     const { parsed } = parseQuickAdd(input);
-    const thread =
-      THREADS.find(
+    const typed =
+      threads.find(
         (t) => t.name.toLowerCase() === parsed.threadName?.toLowerCase(),
       ) ?? null;
 
@@ -137,7 +138,7 @@ export default function RibbonBench() {
         plannedMin: parsed.plannedMin,
         status: "planned",
         sortOrder: prev.length + 1,
-        threadId: thread?.id ?? null,
+        threadId: threadId ?? typed?.id ?? null,
         actualStartMin: null,
         actualEndMin: null,
       },
@@ -231,12 +232,37 @@ export default function RibbonBench() {
 
       <Ribbon
         blocks={blocks}
-        threads={THREADS}
+        threads={threads}
         nowMin={nowMin}
         dayStartMin={DAY_START}
         dayEndMin={DAY_END}
+        isToday
         onToggleDone={toggleDone}
+        onStart={start}
         onOpenBlock={() => {}}
+        onOpenThread={() => {}}
+        onReorderBlock={(id, targetMin) => {
+          // The bench has no store, so ordering is applied straight to state.
+          const queue = result.placed
+            .filter((p) => p.block.kind === "flow" && p.block.status === "planned")
+            .sort((a, b) => a.startMin - b.startMin)
+            .filter((p) => p.block.id !== id);
+          let index = queue.findIndex(
+            (p) => targetMin < (p.startMin + p.endMin) / 2,
+          );
+          if (index === -1) index = queue.length;
+          const order = [
+            ...queue.slice(0, index).map((p) => p.block.id),
+            id,
+            ...queue.slice(index).map((p) => p.block.id),
+          ];
+          const rank = new Map(order.map((bid, i) => [bid, i + 1] as const));
+          setBlocks((prev) =>
+            prev.map((b) =>
+              rank.has(b.id) ? { ...b, sortOrder: rank.get(b.id)! } : b,
+            ),
+          );
+        }}
         onMoveBlock={(id, startMin) =>
           setBlocks((prev) =>
             prev.map((b) =>
@@ -250,7 +276,25 @@ export default function RibbonBench() {
       />
 
       <div className="mt-10">
-        <QuickAdd threads={THREADS} onSubmit={add} />
+        <Composer
+          threads={threads}
+          nowMin={nowMin}
+          onSubmit={add}
+          onCreateThread={async (name) => {
+            const created: Thread = {
+              id: newId(),
+              name,
+              colorIndex: threads.length % 16,
+            };
+            setThreads((prev) => [...prev, created]);
+            return created;
+          }}
+          onPatchThread={(id, patch) =>
+            setThreads((prev) =>
+              prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+            )
+          }
+        />
       </div>
     </main>
   );

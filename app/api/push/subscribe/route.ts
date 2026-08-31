@@ -1,16 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { isPushService } from "@/lib/notify/pushEndpoint";
 
 /* Stores one row per installed device. The endpoint is unique, so a person
    re-enabling notifications on the same phone updates their row instead of
    accumulating dead ones. */
 
 const Subscription = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.string().url().max(2048).refine(isPushService, {
+    message: "endpoint is not a known push service",
+  }),
   keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
+    p256dh: z.string().min(1).max(256),
+    auth: z.string().min(1).max(256),
   }),
 });
 

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { buildGeometry, minuteForY, yForMinute } from "@/lib/timeline/geometry";
 import { threadById, type Thread } from "@/lib/threads";
-import { BlockRow } from "./BlockRow";
+import { BlockRow, type DragPreview } from "./BlockRow";
 import { GapStrip } from "./GapStrip";
 import { PastStrip } from "./PastStrip";
 import { NowLine } from "./NowLine";
@@ -18,14 +18,21 @@ interface Props {
   nowMin: number;
   dayStartMin: number;
   dayEndMin: number;
+  /** False for any day but today: you cannot start a block on Thursday. */
+  isToday: boolean;
   onToggleDone: (blockId: string) => void;
+  onStart: (blockId: string) => void;
   onOpenBlock: (blockId: string) => void;
+  /** The goal's mark on a block was tapped. */
+  onOpenThread: (threadId: string) => void;
   /** A stretch of open time was tapped: start a block of this length here. */
   onFillGap: (startMin: number, minutes: number) => void;
   onPushToTomorrow: (blockId: string) => void;
   onDrop: (blockId: string) => void;
-  /** A block was dragged to a new time. */
+  /** An anchor was dragged to a new time. */
   onMoveBlock: (blockId: string, startMin: number) => void;
+  /** A flow block was dragged to a new place in the queue. */
+  onReorderBlock: (blockId: string, targetMin: number) => void;
 }
 
 export function Ribbon({
@@ -34,19 +41,23 @@ export function Ribbon({
   nowMin,
   dayStartMin,
   dayEndMin,
+  isToday,
   onToggleDone,
+  onStart,
   onOpenBlock,
+  onOpenThread,
   onFillGap,
   onPushToTomorrow,
   onDrop,
   onMoveBlock,
+  onReorderBlock,
 }: Props) {
   // The past is folded by default and expands on demand. Kept here rather than
   // in geometry so the geometry stays a pure function of the day.
   const [showPast, setShowPast] = useState(false);
   // Where a dragged block would land. Drawn as a ghost so the gesture answers
   // "where does this go" before you let go of it.
-  const [ghostMin, setGhostMin] = useState<number | null>(null);
+  const [ghost, setGhost] = useState<DragPreview | null>(null);
 
   const result = useMemo(
     () => layout(blocks, { nowMin, dayStartMin, dayEndMin }),
@@ -69,6 +80,21 @@ export function Ribbon({
     [result.slack],
   );
 
+  /* The one block that may be started. It is the block the plan says you
+     should be in right now — and only while nothing else is running, so the
+     ribbon can never offer two. */
+  const startableId = useMemo(() => {
+    if (!isToday || result.running) return null;
+    const owner = result.placed.find(
+      (p) =>
+        p.block.status === "planned" &&
+        !p.block.external &&
+        p.startMin <= nowMin &&
+        nowMin < p.endMin,
+    );
+    return owner?.block.id ?? null;
+  }, [isToday, result.running, result.placed, nowMin]);
+
   const nowY = yForMinute(geo, nowMin);
   const nothingPlanned =
     result.placed.length === 0 && result.overflow.length === 0;
@@ -85,11 +111,13 @@ export function Ribbon({
           }}
         />
 
-        {nowMin >= geo.startMin && nowMin <= geo.endMin && (
+        {isToday && nowMin >= geo.startMin && nowMin <= geo.endMin && (
           <NowLine y={nowY} nowMin={nowMin} />
         )}
 
-        {ghostMin !== null && <DragGhost geo={geo} startMin={ghostMin} />}
+        {ghost && (
+          <DragGhost geo={geo} startMin={ghost.min} mode={ghost.mode} />
+        )}
 
         {geo.segments.map((seg) => {
           if (seg.type === "block") {
@@ -100,11 +128,15 @@ export function Ribbon({
                 nowMin={nowMin}
                 thread={threadById(threads, seg.placed.block.threadId)}
                 slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
+                startable={startableId === seg.placed.block.id}
                 onToggleDone={onToggleDone}
+                onStart={onStart}
                 onOpen={onOpenBlock}
+                onOpenThread={onOpenThread}
                 minuteAt={(offsetY) => minuteForY(geo, seg.top + offsetY)}
                 onMove={onMoveBlock}
-                onDragPreview={setGhostMin}
+                onReorder={onReorderBlock}
+                onDragPreview={setGhost}
               />
             );
           }

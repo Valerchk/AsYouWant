@@ -30,6 +30,16 @@ export interface Block {
   /** Set once the block actually runs. Minutes from local midnight. */
   actualStartMin: number | null;
   actualEndMin: number | null;
+  /** The routine that grew this block, if any. */
+  routineId?: string | null;
+  /**
+   * Comes from a subscribed calendar rather than from this app.
+   *
+   * The engine treats it as an ordinary anchor — it occupies its hour, and
+   * free time has to account for it or the ribbon lies. Everything above the
+   * engine refuses to edit it: it is somebody else's record of your day.
+   */
+  external?: boolean;
 }
 
 export interface PlacedBlock {
