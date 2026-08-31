@@ -160,15 +160,29 @@ export function Ribbon({
         })}
       </div>
 
-      {/* Sits below the ribbon rather than floating on top of it — the earlier
-          version was absolutely positioned and landed on the gap's own label. */}
+      {/* The first thing anyone ever sees. It used to be one grey sentence,
+          which told a new person nothing about what makes this different from
+          a list — and left them to work out the two kinds of block by
+          experiment, or by asking. Two examples in the field's own syntax do
+          that in three lines and without a tour. */}
       {nothingPlanned && (
-        <p
-          className="mt-4 text-fine text-faint"
+        <div
+          className="mt-4 max-w-sm"
           style={{ marginLeft: CLOCK_W + RAIL_W }}
         >
-          Nothing planned yet. Add a block below, or tap any open stretch.
-        </p>
+          <p className="text-base leading-7 text-ink">
+            Nothing here yet. Write what you want to do in the field below — a
+            time is optional.
+          </p>
+          <div className="mt-4 space-y-2.5">
+            <Example text="Lake walk 45m" says="finds its own place" />
+            <Example text="Standup at 11" says="held at eleven" />
+          </div>
+          <p className="mt-4 text-fine leading-6 text-faint">
+            Things without an hour arrange themselves around the things that
+            have one, and move when the day moves.
+          </p>
+        </div>
       )}
 
       {showPast && (
@@ -188,6 +202,18 @@ export function Ribbon({
         onPushToTomorrow={onPushToTomorrow}
         onDrop={onDrop}
       />
+    </div>
+  );
+}
+
+/** One line of the empty day's example: what you type, and what it does. */
+function Example({ text, says }: { text: string; says: string }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <code className="num rounded-edge bg-sunk px-2 py-1 text-fine text-deep ring-1 ring-rule">
+        {text}
+      </code>
+      <span className="text-micro text-faint">{says}</span>
     </div>
   );
 }

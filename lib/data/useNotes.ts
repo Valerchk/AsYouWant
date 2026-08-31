@@ -18,6 +18,7 @@ export interface UseNotes {
   add: (text: string, plannedFor: string | null) => void;
   remove: (id: string) => void;
   setPlannedFor: (id: string, day: string | null) => void;
+  setText: (id: string, text: string) => void;
 }
 
 export function useNotes(): UseNotes {
@@ -73,6 +74,15 @@ export function useNotes(): UseNotes {
       });
   }, []);
 
+  const setText = useCallback((id: string, text: string) => {
+    setNotes((n) => (n ?? []).map((x) => (x.id === id ? { ...x, text } : x)));
+    noteStore()
+      .setText(id, text)
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
   return {
     notes: notes ?? [],
     loading: notes === null && error === null,
@@ -80,5 +90,6 @@ export function useNotes(): UseNotes {
     add,
     remove,
     setPlannedFor,
+    setText,
   };
 }

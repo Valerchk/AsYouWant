@@ -137,16 +137,36 @@ export function composeBlockStarted(
   };
 }
 
+/* ==========================================================================
+   Why the noisy notifications carry no live number
+   --------------------------------------------------------------------------
+   The scheduler runs every minute and transmits a payload whenever its text
+   differs from the last one sent under the same tag. A body reading "9m left"
+   and then "8m left" is a different text, so a single block ending produced a
+   buzz a minute for the whole warning window, and a block running long buzzed
+   until it was closed. Four alerts in five minutes, exactly as reported.
+
+   So these say the thing once and let the silent live card carry the count.
+   Where a number genuinely has to escalate — running long — it moves in
+   quarter-hour steps under an unchanged tag, which replaces the card on the
+   lock screen instead of adding to it. lib/notify/throttle.ts is the second
+   line of defence, and does not trust this file to stay disciplined.
+   ========================================================================== */
+
+/** How coarsely an escalating number is allowed to move. */
+export const ESCALATION_STEP_MIN = 15;
+
 export function composeEndingSoon(
   block: PlacedBlock,
   layout: Layout,
-  nowMin: number,
+  leadMin: number,
 ): NotificationPayload {
-  const left = Math.max(0, block.endMin - nowMin);
   return {
     tag: `edge-soon-${block.block.id}`,
     title: block.block.title,
-    body: `${spoken(left)} left. Land the thought.`,
+    // The lead, not the live remainder: it is what "soon" means here, it is
+    // true within a minute of firing, and it never changes underneath.
+    body: `${spoken(leadMin)} left. Land the thought.`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -163,10 +183,16 @@ export function composeOverrun(
       ? `${squeezed} ${squeezed === 1 ? "block" : "blocks"} no longer fit today.`
       : "Cut it here, or push the rest down?";
 
+  // Quarter-hour steps. The tag is unchanged, so each new step replaces the
+  // card rather than stacking a second one beside it.
+  const step =
+    Math.floor(block.overrunMin / ESCALATION_STEP_MIN) * ESCALATION_STEP_MIN;
+  const over = step > 0 ? `${spoken(step)} over` : "Running over";
+
   return {
     tag: `edge-over-${block.block.id}`,
     title: block.block.title,
-    body: `${spoken(block.overrunMin)} over. ${consequence}`,
+    body: `${over}. ${consequence}`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
@@ -177,13 +203,13 @@ export function composeOverrun(
 export function composeAnchorMissed(
   block: PlacedBlock,
   layout: Layout,
-  nowMin: number,
 ): NotificationPayload {
-  const since = Math.max(0, nowMin - block.endMin);
   return {
     tag: `edge-missed-${block.block.id}`,
     title: block.block.title,
-    body: `Ended ${spoken(since)} ago. Did it happen?`,
+    // No "12 minutes ago": the question is the same at 3 minutes and at 19,
+    // and counting made it a new message every time it was asked.
+    body: `It was due at ${formatClock(block.startMin)}. Did it happen?`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,

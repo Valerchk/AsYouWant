@@ -195,6 +195,22 @@ describe("not spamming the lock screen", () => {
 });
 
 describe("running long", () => {
+  it("escalates in quarter hours rather than every minute", () => {
+    const running = block({
+      plannedMin: 30,
+      status: "active",
+      actualStartMin: H(10),
+    });
+    const bodies = new Set<string>();
+    for (let m = H(10, 30); m < H(11, 30); m += 1) {
+      const out = decide([running], ctx({ nowMin: m }));
+      const over = out.find((n) => n.tag.startsWith("edge-over-"));
+      if (over) bodies.add(over.body);
+    }
+    // An hour of running over is four things to say, not sixty.
+    expect(bodies.size).toBeLessThanOrEqual(4);
+  });
+
   it("reports the overrun and what it costs", () => {
     const running = block({
       title: "Review",
@@ -237,6 +253,17 @@ describe("ending soon", () => {
     expect(out.some((n) => n.tag.startsWith("edge-soon-"))).toBe(true);
   });
 
+  it("says the same thing for the whole warning window", () => {
+    // The counting version produced a buzz a minute for ten minutes.
+    const bodies = new Set<string>();
+    for (let m = H(10, 50); m < H(11); m += 1) {
+      const out = decide([anchor(H(10), 60)], ctx({ nowMin: m }));
+      const soon = out.find((n) => n.tag.startsWith("edge-soon-"));
+      if (soon) bodies.add(soon.body);
+    }
+    expect(bodies.size).toBe(1);
+  });
+
   it("stays quiet earlier in the block", () => {
     const out = decide([anchor(H(10), 60)], ctx({ nowMin: H(10, 20) }));
     expect(out.some((n) => n.tag.startsWith("edge-soon-"))).toBe(false);
@@ -257,7 +284,19 @@ describe("a missed anchor", () => {
   it("mentions it while it is still worth mentioning", () => {
     const out = decide([anchor(H(10), 30)], ctx({ nowMin: H(10, 45) }));
     const missed = out.find((n) => n.tag.startsWith("edge-missed-"))!;
-    expect(missed.body).toMatch(/ago/);
+    expect(missed.body).toContain("10:00");
+    expect(missed.body).toMatch(/did it happen/i);
+  });
+
+  it("asks in the same words every minute it is asked", () => {
+    // It used to count — "ended 3m ago", then "4m ago" — and every new
+    // wording was a new message, so one missed meeting buzzed twenty times.
+    const bodies = new Set<string>();
+    for (let m = H(10, 32); m <= H(10, 48); m += 1) {
+      const out = decide([anchor(H(10), 30)], ctx({ nowMin: m }));
+      bodies.add(out.find((n) => n.tag.startsWith("edge-missed-"))!.body);
+    }
+    expect(bodies.size).toBe(1);
   });
 
   it("lets it go once the window has passed", () => {

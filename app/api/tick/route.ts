@@ -5,6 +5,8 @@ import { toBlock, toThread } from "@/lib/blocks/mapper";
 import { layout } from "@/lib/timeline/engine";
 import { decideNotifications } from "@/lib/notify/decide";
 import { contentHash, sendPush } from "@/lib/notify/send";
+import { LIVE_TAG } from "@/lib/notify/compose";
+import { applyThrottle } from "@/lib/notify/throttle";
 import { dateInZone, minutesInZone } from "@/lib/time";
 
 /* ==========================================================================
@@ -45,6 +47,8 @@ interface TickReport {
   scanned: number;
   sent: number;
   skipped: number;
+  /** Worth saying, but not worth interrupting for yet. Offered again next tick. */
+  held: number;
   pruned: number;
   errors: string[];
 }
@@ -66,6 +70,7 @@ export async function POST(request: NextRequest) {
     scanned: 0,
     sent: 0,
     skipped: 0,
+    held: 0,
     pruned: 0,
     errors: [],
   };
@@ -139,18 +144,31 @@ export async function POST(request: NextRequest) {
 
       const { data: states } = await admin
         .from("notification_state")
-        .select("tag, content_hash")
+        .select("tag, content_hash, sent_at")
         .eq("user_id", userId);
       const seen = new Map(
         (states ?? []).map((s) => [s.tag, s.content_hash] as const),
       );
 
-      for (const payload of payloads) {
+      /* Anything whose text is unchanged is not news. Filtering it out before
+         the throttle matters: an unchanged payload is not an interruption and
+         must not spend the budget that a genuinely new one needs. */
+      const fresh = payloads.filter(
+        (p) => seen.get(p.tag) !== contentHash(p),
+      );
+
+      /* Everything except the live card arrives with a sound, so everything
+         except the live card is rationed. */
+      const audible = (states ?? [])
+        .filter((s) => s.tag !== LIVE_TAG)
+        .map((s) => ({ tag: s.tag, sentAt: new Date(s.sent_at).getTime() }));
+
+      const { send, held } = applyThrottle(fresh, audible, now.getTime());
+      report.skipped += payloads.length - fresh.length;
+      report.held += held.length;
+
+      for (const payload of send) {
         const hash = contentHash(payload);
-        if (seen.get(payload.tag) === hash) {
-          report.skipped += 1;
-          continue;
-        }
 
         let delivered = false;
         for (const sub of userSubs) {

@@ -272,23 +272,26 @@ export function BlockRow({
               </span>
             ) : (
               thread && (
+                /* A mark, not a word. The block is already wearing the goal's
+                   colour, so printing the goal's name underneath said the same
+                   thing a second time and cost the row a line of text it could
+                   not spare. The mark is still the way in: tapping it opens
+                   the goal, and the list behind the header is the legend. */
                 <button
                   type="button"
                   onClick={() => onOpenThread(thread.id)}
                   aria-label={`Open ${thread.name}`}
-                  className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-faint transition-colors hover:text-ink"
+                  title={thread.name}
+                  className="pointer-events-auto -m-1 flex shrink-0 items-center p-1"
                 >
-                  {/* No coloured dash beside the name any more: the block is
-                      already that colour, and the mark was saying it twice. */}
-                  {isGoalIcon(thread.icon) && (
-                    <GoalIcon
-                      name={thread.icon}
-                      size={13}
-                      className="shrink-0"
-                      style={{ color: colour }}
+                  {isGoalIcon(thread.icon) ? (
+                    <GoalIcon name={thread.icon} size={14} style={{ color: colour }} />
+                  ) : (
+                    <span
+                      className="block h-2.5 w-2.5 rounded-plate"
+                      style={{ boxShadow: `inset 0 0 0 1.5px ${colour}` }}
                     />
                   )}
-                  <span className="truncate">{thread.name}</span>
                 </button>
               )
             )}

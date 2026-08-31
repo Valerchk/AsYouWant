@@ -128,7 +128,7 @@ export default function Landing() {
                   className="w-1.5 rounded-plate"
                   style={{
                     height: [96, 40, 132, 24, 68][n - 1],
-                    background: `var(--color-thread-${n})`,
+                    background: `var(--thread-${n})`,
                     opacity: n === 4 ? 0.35 : 1,
                   }}
                 />

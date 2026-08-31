@@ -314,5 +314,10 @@ export function createLocalNoteStore(): NoteStore {
         loadNotes().map((n) => (n.id === id ? { ...n, plannedFor: day } : n)),
       );
     },
+    async setText(id, text) {
+      saveNotes(
+        loadNotes().map((n) => (n.id === id ? { ...n, text } : n)),
+      );
+    },
   };
 }

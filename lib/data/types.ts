@@ -101,4 +101,6 @@ export interface NoteStore {
   remove(id: string): Promise<void>;
   /** Move between "today" and "someday". */
   setPlannedFor(id: string, day: string | null): Promise<void>;
+  /** A thought is allowed to change its mind. */
+  setText(id: string, text: string): Promise<void>;
 }

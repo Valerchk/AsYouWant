@@ -14,7 +14,6 @@ import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, type Thread } from "@/lib/threads";
 import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
-import { GoalStyle } from "@/components/GoalStyle";
 import { SendButton } from "@/components/SendButton";
 
 /* ==========================================================================
@@ -61,23 +60,15 @@ interface Props {
   threads: Thread[];
   nowMin: number;
   onSubmit: (input: string, threadId: string | null) => void;
-  onCreateThread: (name: string) => Promise<Thread>;
-  onPatchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { threads, nowMin, onSubmit, onCreateThread, onPatchThread },
+  { threads, nowMin, onSubmit },
   ref,
 ) {
   const [value, setValue] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
-  const [naming, setNaming] = useState(false);
-  const [draft, setDraft] = useState("");
-  /* A goal made a moment ago, still on screen. Its colour and icon appear by
-     themselves rather than behind a tap: choosing how it looks belongs to the
-     breath in which it was named, not to a trip somewhere else. */
-  const [justMade, setJustMade] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Exposed imperatively rather than as a prop: tapping an open stretch fills
@@ -120,6 +111,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   const hasDuration = tokens.some((t) => t.type === "duration");
 
+  /* An empty composer is one line and nothing else. The chips describe a
+     block, and until there is something written there is no block for them to
+     describe — three rows of controls over an empty field is furniture. */
+  const composing = value.trim().length > 0;
+
   function edit(next: string) {
     setValue(next);
     inputRef.current?.focus();
@@ -129,25 +125,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
      toggle rather than a trap you can only get out of by picking another. */
   function pickThread(id: string) {
     setThreadId((current) => (current === id ? null : id));
-    setJustMade(null);
     // A #tag left in the text would say one goal while the row shows another.
     setValue((v) => stripThread(v));
-  }
-
-  function createThread() {
-    const name = draft.trim();
-    if (!name) return;
-    setDraft("");
-    setNaming(false);
-    onCreateThread(name)
-      .then((made) => {
-        setThreadId(made.id);
-        setJustMade(made.id);
-        setValue((v) => stripThread(v));
-      })
-      // The failure is already on screen: useDay puts the store's error
-      // where the day was.
-      .catch(() => {});
   }
 
   function submit(e: React.FormEvent) {
@@ -157,8 +136,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setValue("");
     setThreadId(null);
     setPanel(null);
-    setNaming(false);
-    setJustMade(null);
     inputRef.current?.focus();
   }
 
@@ -193,7 +170,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             transition={{ type: "spring", stiffness: 420, damping: 38 }}
             className="overflow-hidden"
           >
-            <div className="max-h-[42dvh] overflow-y-auto pb-3">
+            {/* A ceiling, not a size. The footer is fixed over the day, and
+                the last thing to grow inside it hid the entire ribbon. */}
+            <div className="max-h-[30dvh] overflow-y-auto pb-3">
               {panel === "duration" && (
                 <div className="flex flex-wrap gap-1.5">
                   {DURATIONS.map((min) => (
@@ -302,8 +281,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <SendButton disabled={!parsed.title} label="Add this block" />
       </div>
 
-      {/* Every goal, laid out. It wraps rather than scrolling sideways: a row
-          you have to drag to read is a row whose far end nobody ever sees. */}
+      {/* Every goal that exists, laid out — one tap attaches it. It wraps
+          rather than scrolling sideways: a row you have to drag to read is a
+          row whose far end nobody ever sees.
+
+          There is no way to make a goal from here, and that is the point. An
+          empty "＋" beside a list of coloured labels is an invitation to type
+          the thing you want to do, and a day planner that answers "Change my
+          address" with a colour swatch has misled you. A goal is only ever
+          born from a block that already exists — see BlockSheet. */}
+      {composing && (threads.length > 0 || parsed.threadName) && (
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {threads.map((t) => {
           const colour = threadColor(t.colorIndex);
@@ -340,17 +327,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           );
         })}
 
-        {!naming && (
-          <button
-            type="button"
-            onClick={() => setNaming(true)}
-            className="flex items-center gap-1.5 rounded-edge px-2.5 py-1.5 text-fine text-faint ring-1 ring-rule transition-colors hover:bg-sunk hover:text-ink"
-          >
-            <Icon name="plus" size={13} />
-            {threads.length === 0 ? "Goal" : ""}
-          </button>
-        )}
-
         {/* A goal typed as a #tag that names nothing yet. It becomes real on
             send; showing it here keeps the row honest in the meantime. */}
         {!thread && parsed.threadName && (
@@ -359,49 +335,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           </span>
         )}
       </div>
-
-      {naming && (
-        <div className="mt-2 flex items-center gap-1.5">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // This lives inside the composer's form; without stopping the
-              // key, Enter would submit the block instead of naming the goal.
-              if (e.key === "Enter") {
-                e.preventDefault();
-                createThread();
-              }
-              if (e.key === "Escape") setNaming(false);
-            }}
-            placeholder="Name the goal…"
-            aria-label="New goal name"
-            autoFocus
-            className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
-          />
-          <button
-            type="button"
-            onClick={createThread}
-            disabled={!draft.trim()}
-            className="rounded-edge bg-accent px-3 py-2 text-fine text-paper disabled:bg-rule disabled:text-faint"
-          >
-            Create
-          </button>
-        </div>
-      )}
-
-      {/* The colour and icon of a goal named a moment ago, offered without
-          being asked for — and gone again once the block is sent. */}
-      {justMade && thread?.id === justMade && (
-        <div className="mt-3 border-t border-grid pt-3">
-          <GoalStyle
-            thread={thread}
-            onPatch={(patch) => onPatchThread(thread.id, patch)}
-          />
-        </div>
       )}
 
       {/* How long, and when. */}
+      {composing && (
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <ChipToggle
           open={panel === "duration"}
@@ -425,6 +362,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             : `At ${formatClock(parsed.startMin)}`}
         </ChipToggle>
       </div>
+      )}
     </form>
   );
 });

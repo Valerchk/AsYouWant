@@ -22,10 +22,10 @@ interface Row {
 }
 
 const ROWS: Row[] = [
-  { id: "a", title: "Deep work", thread: "Thesis", colour: "var(--color-thread-1)", min: 90 },
-  { id: "b", title: "Standup", thread: "Work", colour: "var(--color-thread-4)", min: 30 },
-  { id: "c", title: "Review", thread: "Work", colour: "var(--color-thread-4)", min: 45 },
-  { id: "d", title: "Gym", thread: "Health", colour: "var(--color-thread-3)", min: 60 },
+  { id: "a", title: "Deep work", thread: "Thesis", colour: "var(--thread-1)", min: 90 },
+  { id: "b", title: "Standup", thread: "Work", colour: "var(--thread-4)", min: 30 },
+  { id: "c", title: "Review", thread: "Work", colour: "var(--thread-4)", min: 45 },
+  { id: "d", title: "Gym", thread: "Health", colour: "var(--thread-3)", min: 60 },
 ];
 
 const START = 9 * 60;

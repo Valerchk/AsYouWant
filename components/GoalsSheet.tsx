@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Sheet } from "@/components/Sheet";
 import { Icon } from "@/components/icons/Icon";
@@ -15,9 +14,10 @@ import { threadColor, type Thread } from "@/lib/threads";
    end: however many there are, they are all on the screen, one under another,
    with what each has actually had this week beside it.
 
-   Nothing is assigned from here. Choosing a goal for a block happens in the
-   composer, in the same breath as writing the block; this is the place you
-   come to look, and to change how a goal looks or what you owe it. */
+   Read-only in the sense that matters: goals are neither made nor assigned
+   here. Both of those happen while looking at a block, which is the only
+   context in which "what is this part of" can be read at the right scale.
+   This is where you come to see where the weeks went. */
 
 interface Props {
   open: boolean;
@@ -26,7 +26,6 @@ interface Props {
   week: Map<string, number>;
   onClose: () => void;
   onOpenGoal: (threadId: string) => void;
-  onCreate: (name: string) => Promise<Thread>;
 }
 
 export function GoalsSheet({ open, ...rest }: Props) {
@@ -40,22 +39,8 @@ function SheetBody({
   week,
   onClose,
   onOpenGoal,
-  onCreate,
 }: Omit<Props, "open">) {
-  const [naming, setNaming] = useState(false);
-  const [draft, setDraft] = useState("");
-
   const total = threads.reduce((sum, t) => sum + (week.get(t.id) ?? 0), 0);
-
-  function create() {
-    const name = draft.trim();
-    if (!name) return;
-    setDraft("");
-    setNaming(false);
-    onCreate(name).catch(() => {
-      // Already on screen: useDay puts the store's error where the day was.
-    });
-  }
 
   return (
     <Sheet label="Goals" onClose={onClose}>
@@ -137,46 +122,15 @@ function SheetBody({
         })}
       </ul>
 
-      {naming ? (
-        <div className="mt-4 flex items-center gap-1.5">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") create();
-              if (e.key === "Escape") setNaming(false);
-            }}
-            placeholder="Name the goal…"
-            aria-label="New goal name"
-            autoFocus
-            className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2.5 text-base text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
-          />
-          <button
-            type="button"
-            onClick={create}
-            disabled={!draft.trim()}
-            className="rounded-edge bg-accent px-3 py-2.5 text-fine text-paper disabled:bg-rule disabled:text-faint"
-          >
-            Create
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setNaming(true)}
-          className="mt-4 flex items-center gap-2 text-fine text-accent"
-        >
-          <Icon name="plus" size={15} />
-          New goal
-        </button>
-      )}
-
-      {threads.length === 0 && !naming && (
-        <p className="mt-3 text-micro text-faint">
-          You do not need one to plan a day. A goal is only there for when you
-          want to know where the weeks went.
+      {threads.length === 0 && (
+        <p className="mt-2 text-base leading-7 text-faint">
+          Nothing yet, and nothing to set up. A goal appears the first time you
+          tell a block what it is part of — open any block on the day and the
+          question is there. Until then the day works exactly as well without
+          them.
         </p>
       )}
+
     </Sheet>
   );
 }

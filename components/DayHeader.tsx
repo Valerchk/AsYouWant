@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatClock, formatDuration, daysBetween, weekdayOf } from "@/lib/time";
 import { Icon } from "@/components/icons/Icon";
 import { WeekStrip } from "@/components/WeekStrip";
+import { threadColor, type Thread } from "@/lib/threads";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Props {
@@ -23,6 +24,9 @@ interface Props {
   confirmed: boolean;
   onConfirm: () => void;
   onOpenTemplates: () => void;
+  /** Goals share the numbers line; tapping them opens the list. */
+  threads: Thread[];
+  onOpenGoals: () => void;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -41,23 +45,9 @@ function titleFor(date: string, today: string): string {
   return `${WEEKDAYS[weekdayOf(date)]} ${day} ${MONTHS[month - 1]}`;
 }
 
-function Metric({
-  label,
-  value,
-  tone = "ink",
-}: {
-  label: string;
-  value: string;
-  tone?: "ink" | "accent" | "over";
-}) {
-  const colour =
-    tone === "accent" ? "text-accent" : tone === "over" ? "text-over" : "text-ink";
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className={`num text-fine leading-none ${colour}`}>{value}</span>
-      <span className="text-micro leading-none text-faint">{label}</span>
-    </div>
-  );
+/** The separator between the day's numbers. */
+function Dot() {
+  return <span className="text-faint">·</span>;
 }
 
 export function DayHeader({
@@ -74,11 +64,13 @@ export function DayHeader({
   confirmed,
   onConfirm,
   onOpenTemplates,
+  threads,
+  onOpenGoals,
 }: Props) {
   const isToday = date === today;
 
   return (
-    <header className="safe-top px-6 pt-5">
+    <header className="safe-top px-6 pt-4">
       <WeekStrip
         date={date}
         today={today}
@@ -86,20 +78,23 @@ export function DayHeader({
         onPick={onPickDate}
       />
 
-      <div className="mt-4 flex items-start justify-between">
-        <div className="min-w-0">
-          <h1 className="display text-title text-deep">
-            {titleFor(date, today)}
-          </h1>
-          {/* The clock belongs to today alone. Printing the current time over
-              Thursday's plan says something untrue about Thursday. */}
-          {isToday && (
-            <div className="num mt-1 text-micro tracking-[0.18em] text-accent">
-              {formatClock(nowMin)}
-            </div>
-          )}
-        </div>
-        <div className="-mr-2 flex items-center">
+      {/* The clock beside the day's name rather than beneath it, and the
+          day's numbers as one sentence rather than a rank of stacked pairs.
+          The header used to run to roughly 250px before a single block of the
+          day appeared; on a phone that is a third of the screen spent on
+          chrome. */}
+      <div className="mt-3 flex items-baseline gap-2.5">
+        <h1 className="display text-title text-deep">
+          {titleFor(date, today)}
+        </h1>
+        {/* The clock belongs to today alone. Printing the current time over
+            Thursday's plan says something untrue about Thursday. */}
+        {isToday && (
+          <span className="num text-micro tracking-[0.14em] text-accent">
+            {formatClock(nowMin)}
+          </span>
+        )}
+        <div className="-mr-2 ml-auto flex shrink-0 items-center">
           <Link
             href="/review"
             aria-label="Evening review"
@@ -129,15 +124,45 @@ export function DayHeader({
         </div>
       </div>
 
-      <div className="mt-5 flex items-end gap-7 border-t border-rule pt-4">
-        <Metric label="blocks" value={String(blockCount)} />
-        <Metric label="planned" value={formatDuration(plannedMin)} />
-        <Metric label="free" value={formatDuration(freeMin)} tone="accent" />
+      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-rule pt-2.5 text-micro">
+        <span className="num text-ink">
+          {blockCount} {blockCount === 1 ? "block" : "blocks"}
+        </span>
+        <Dot />
+        <span className="num text-ink">{formatDuration(plannedMin)}</span>
+        <Dot />
+        <span className="num text-accent">{formatDuration(freeMin)} free</span>
         {intentionCount > 0 && (
-          <Metric label="intentions" value={String(intentionCount)} />
+          <>
+            <Dot />
+            <span className="num text-ink">{intentionCount} intentions</span>
+          </>
         )}
         {overflowCount > 0 && (
-          <Metric label="won't fit" value={String(overflowCount)} tone="over" />
+          <>
+            <Dot />
+            <span className="num text-over">{overflowCount} won&rsquo;t fit</span>
+          </>
+        )}
+
+        {/* Goals ride the same line rather than claiming one of their own. */}
+        {threads.length > 0 && (
+          <button
+            type="button"
+            onClick={onOpenGoals}
+            className="ml-auto flex shrink-0 items-center gap-1.5 text-faint transition-colors hover:text-ink"
+          >
+            <span className="flex -space-x-1">
+              {threads.slice(0, 6).map((t) => (
+                <span
+                  key={t.id}
+                  className="h-2.5 w-2.5 rounded-plate ring-1 ring-paper"
+                  style={{ background: threadColor(t.colorIndex) }}
+                />
+              ))}
+            </span>
+            <Icon name="chevron" size={11} />
+          </button>
         )}
       </div>
 

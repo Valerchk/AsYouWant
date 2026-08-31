@@ -142,7 +142,7 @@ export function decideNotifications(
     } else if (leadMin > 0) {
       const left = current.endMin - nowMin;
       if (left > 0 && left <= leadMin) {
-        out.push(composeEndingSoon(current, layout, nowMin));
+        out.push(composeEndingSoon(current, layout, leadMin));
       }
     }
   }
@@ -154,7 +154,7 @@ export function decideNotifications(
     if (p.block.kind !== "anchor" || !p.isMissed) continue;
     const since = nowMin - p.endMin;
     if (since >= 0 && since <= MISSED_WINDOW_MIN) {
-      out.push(composeAnchorMissed(p, layout, nowMin));
+      out.push(composeAnchorMissed(p, layout));
     }
   }
 

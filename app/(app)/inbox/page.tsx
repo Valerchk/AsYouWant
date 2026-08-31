@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Icon } from "@/components/icons/Icon";
@@ -33,7 +33,8 @@ export default function Inbox() {
 function InboxScreen({ nowMin }: { nowMin: number }) {
   const router = useRouter();
   const today = localDay();
-  const { notes, loading, error, add, remove, setPlannedFor } = useNotes();
+  const { notes, loading, error, add, remove, setPlannedFor, setText } =
+    useNotes();
   const { addBlock } = useDay(today, nowMin);
 
   const [draft, setDraft] = useState("");
@@ -50,12 +51,22 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
     [notes, today],
   );
 
+  /* The field grows with what is in it, up to a limit, then scrolls. */
+  const grow = useRef<HTMLTextAreaElement>(null);
+  function fit(e: React.FormEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
   function capture(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
     add(text, asIntention ? today : null);
     setDraft("");
+    const el = grow.current;
+    if (el) el.style.height = "auto";
   }
 
   /* Give an intention a place on the clock. The text runs through the same
@@ -111,6 +122,7 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
                     onMove={() => setPlannedFor(note.id, null)}
                     moveLabel="Someday"
                     onDelete={() => remove(note.id)}
+                    onEdit={(text) => setText(note.id, text)}
                   />
                 ))}
               </AnimatePresence>
@@ -141,6 +153,7 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
                       onMove={() => setPlannedFor(note.id, today)}
                       moveLabel="Today"
                       onDelete={() => remove(note.id)}
+                      onEdit={(text) => setText(note.id, text)}
                     />
                   ))}
                 </AnimatePresence>
@@ -152,14 +165,20 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
 
       <div className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm">
         <form onSubmit={capture} className="mx-auto max-w-2xl px-6 py-3.5">
+          {/* A textarea, not a single line. A thought caught in a hurry is
+              rarely one clause, and a field that scrolls sideways past the
+              first ten words is a field people stop using. Return makes a new
+              line here; the button is what sends. */}
           <div className="relative">
-            <input
+            <textarea
+              ref={grow}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onInput={fit}
+              rows={1}
               placeholder={asIntention ? "Today I want to…" : "Catch a thought…"}
-              enterKeyHint="done"
               aria-label="Add"
-              className="w-full rounded-edge bg-sunk py-3 pr-12 pl-3 text-base text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/60 focus:shadow-lift focus:ring-accent/40"
+              className="block max-h-40 w-full resize-none overflow-y-auto rounded-edge bg-sunk py-3 pr-12 pl-3 text-base leading-6 text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/60 focus:shadow-lift focus:ring-accent/40"
             />
             <SendButton
               disabled={!draft.trim()}
@@ -234,6 +253,7 @@ function NoteRow({
   onMove,
   moveLabel,
   onDelete,
+  onEdit,
 }: {
   note: NoteData;
   promoted: boolean;
@@ -241,7 +261,9 @@ function NoteRow({
   onMove: () => void;
   moveLabel: string;
   onDelete: () => void;
+  onEdit: (text: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const { parsed } = parseQuickAdd(note.text);
   const hasDetail =
     parsed.startMin !== null || parsed.plannedMin !== DEFAULT_DURATION_MIN;
@@ -260,7 +282,32 @@ function NoteRow({
       className="flex items-start gap-2 border-b border-grid py-3.5"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-base leading-6 text-ink">{note.text}</p>
+        {/* Tap the words to change them. A thought you cannot correct is a
+            thought you delete and retype. */}
+        {editing ? (
+          <textarea
+            defaultValue={note.text}
+            autoFocus
+            rows={Math.max(1, note.text.split("\n").length)}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (next && next !== note.text) onEdit(next);
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(false);
+            }}
+            aria-label="Edit this note"
+            className="block w-full resize-none rounded-edge bg-sunk px-2 py-1 text-base leading-6 text-deep ring-1 ring-accent/40 outline-none"
+          />
+        ) : (
+          <p
+            onClick={() => setEditing(true)}
+            className="cursor-text text-base leading-6 whitespace-pre-wrap text-ink"
+          >
+            {note.text}
+          </p>
+        )}
         <div className="mt-1 flex items-center gap-2.5 text-micro text-faint">
           <span className="num">{relativeTime(note.createdAt)}</span>
           {hasDetail && (

@@ -534,5 +534,14 @@ export function createRemoteNoteStore(): NoteStore {
         .eq("id", id);
       if (error) throw new Error(error.message);
     },
+
+    async setText(id: string, text: string) {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("notes")
+        .update({ text: text.trim() })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    },
   };
 }

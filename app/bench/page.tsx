@@ -128,7 +128,7 @@ export default function Bench() {
             <div key={name} className="flex-1 bg-paper pt-3 pb-2 text-center">
               <div
                 className="mx-auto mb-2 h-20 w-1.5"
-                style={{ background: `var(--color-thread-${i + 1})` }}
+                style={{ background: `var(--thread-${i + 1})` }}
               />
               <div className="text-micro text-faint">{name}</div>
             </div>

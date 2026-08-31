@@ -89,7 +89,7 @@ const SEED: Block[] = [
 
 export default function RibbonBench() {
   const [blocks, setBlocks] = useState<Block[]>(SEED);
-  const [threads, setThreads] = useState<Thread[]>(SEED_THREADS);
+  const threads = SEED_THREADS;
   const [nowMin, setNowMin] = useState(9 * 60 + 20);
 
   const result = layout(blocks, {
@@ -280,20 +280,6 @@ export default function RibbonBench() {
           threads={threads}
           nowMin={nowMin}
           onSubmit={add}
-          onCreateThread={async (name) => {
-            const created: Thread = {
-              id: newId(),
-              name,
-              colorIndex: threads.length % 16,
-            };
-            setThreads((prev) => [...prev, created]);
-            return created;
-          }}
-          onPatchThread={(id, patch) =>
-            setThreads((prev) =>
-              prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-            )
-          }
         />
       </div>
     </main>

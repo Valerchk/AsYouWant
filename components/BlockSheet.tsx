@@ -39,6 +39,8 @@ interface Props {
   onStart: (id: string) => void;
   onCarry: (block: Block) => void;
   onPatchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
+  /** The only place a goal is ever born: looking at a block that needs one. */
+  onCreateThread: (name: string) => Promise<Thread>;
   /** Turning any weekday on makes this block a routine. */
   onRepeat: (block: Block, mask: number) => void;
 }
@@ -65,14 +67,29 @@ function SheetBody({
   onStart,
   onCarry,
   onPatchThread,
+  onCreateThread,
   onRepeat,
 }: Props & { block: Block }) {
   const [title, setTitle] = useState(block.title);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const [draft, setDraft] = useState("");
 
   const thread = threads.find((t) => t.id === block.threadId) ?? null;
   const routine = routines.find((r) => r.id === block.routineId) ?? null;
   const mask = routine?.repeatMask ?? 0;
+
+  function create() {
+    const name = draft.trim();
+    if (!name) return;
+    setDraft("");
+    setNaming(false);
+    onCreateThread(name)
+      .then((made) => onPatch(block.id, { threadId: made.id }))
+      .catch(() => {
+        // Already on screen: useDay puts the store's error where the day was.
+      });
+  }
 
   function commitTitle() {
     const next = title.trim();
@@ -233,14 +250,21 @@ function SheetBody({
         </p>
       </Section>
 
-      {/* ---- thread ---- */}
-      <Section label="Goal">
+      {/* ---- thread ----
+
+           "Part of", not "Goal". Asked here, next to a block that already
+           exists, the question can only be read at the right scale: nobody
+           looking at a block called "Change my address" answers it by making
+           a goal of the same name. Asked on an empty screen, with a plus and
+           a row of colours, that is exactly what people answer — which is how
+           a task ended up wearing a house icon and never reaching the day. */}
+      <Section label="Part of">
         <div className="flex flex-wrap gap-1.5">
           <Chip
             active={block.threadId === null}
             onClick={() => onPatch(block.id, { threadId: null })}
           >
-            None
+            Nothing in particular
           </Chip>
           {threads.map((t) => (
             <Chip
@@ -255,7 +279,40 @@ function SheetBody({
               {t.name}
             </Chip>
           ))}
+          {!naming && (
+            <Chip active={false} onClick={() => setNaming(true)}>
+              <Icon name="plus" size={13} />
+              Something new
+            </Chip>
+          )}
         </div>
+
+        {naming && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") create();
+                if (e.key === "Escape") setNaming(false);
+              }}
+              // Three examples instead of a blank prompt: they say what size
+              // of thing belongs here without a sentence of explanation.
+              placeholder="Work, Study, Health…"
+              aria-label="Name of the goal this block is part of"
+              autoFocus
+              className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
+            />
+            <button
+              type="button"
+              onClick={create}
+              disabled={!draft.trim()}
+              className="rounded-edge bg-accent px-3 py-2 text-fine text-paper disabled:bg-rule disabled:text-faint"
+            >
+              Add
+            </button>
+          </div>
+        )}
 
         {/* Restyling a goal here changes it everywhere that goal appears — it
             belongs to the goal, not to this block. */}
