@@ -76,8 +76,9 @@ export const viewport: Viewport = {
   userScalable: false,
   // Let the on-screen keyboard shrink the layout viewport where the browser
   // supports it, so a bar pinned to the bottom lands above the keyboard on
-  // its own. iOS ignores this and is handled by lib/useKeyboardInset; the two
-  // agree, because that hook measures zero precisely when this works.
+  // its own. lib/useViewportShift covers the rest: it measures zero precisely
+  // when this works, and it is what puts the bars back when a browser shrinks
+  // the layout viewport and then forgets to restore it.
   interactiveWidget: "resizes-content",
 };
 

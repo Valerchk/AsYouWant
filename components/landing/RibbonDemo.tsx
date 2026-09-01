@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { formatClock, formatDuration } from "@/lib/time";
 
 /* ==========================================================================
@@ -47,8 +47,12 @@ const SAVED = 15;
 /* Same geometry as the real ribbon: longer blocks are taller, but a short one
    still gets enough room for its own title. Positions are prefix sums of
    these, never of the raw minutes, so nothing can land half a line off. */
-const PX_PER_MIN = 1.15;
-const MIN_H = 56;
+const PX_PER_MIN = 1.25;
+/* Exactly the room a title and its goal need, and no more, so that thirty
+   minutes and forty-five are visibly different lengths. At the old floor both
+   came out the same height, which quietly contradicted the numbers printed
+   beside them. */
+const MIN_H = 46;
 const height = (min: number) => Math.max(MIN_H, Math.round(min * PX_PER_MIN));
 
 const CLOCK_W = 46;
@@ -59,6 +63,13 @@ const STAGE_H = ROWS.reduce((sum, r) => sum + height(r.min), 0);
 
 /** Pixels everything below the first block travels when it finishes early. */
 const PULL_UP = height(ROWS[0].min - SAVED) - height(ROWS[0].min);
+
+/* Where "now" is. It climbs through the first block while that block runs,
+   and then simply stops — and the day rises to meet it. That is the argument
+   the page is making, stated as one moving line rather than as a sentence:
+   the plan comes to where you actually are, not the other way round. */
+const NOW_FROM = Math.round(height(ROWS[0].min) * 0.34);
+const NOW_TO = height(ROWS[0].min - SAVED);
 
 const SPRING = { type: "spring", stiffness: 260, damping: 30 } as const;
 
@@ -111,7 +122,12 @@ export function RibbonDemo() {
               style={{ top: base, height: height(row.min) }}
               initial={false}
               animate={{ y: shift, height: h }}
-              transition={SPRING}
+              // Staggered by a frame and a half each. The day does not jump to
+              // its new shape in one cut — the block lets go, the next takes
+              // up the slack, and the one after that follows. Reading it as a
+              // chain rather than a jump is the whole difference between an
+              // animation and a transition.
+              transition={{ ...SPRING, delay: closed ? i * 0.045 : 0 }}
             >
               {/* The block, filled with its own colour — the same mix the app
                   uses, so the page shows what you actually get. */}
@@ -128,22 +144,15 @@ export function RibbonDemo() {
                 }}
               />
 
-              {running && (
-                <div
-                  className="absolute right-0 h-[2px] bg-rule"
-                  style={{ left: CLOCK_W + RAIL_W, bottom: 1 }}
-                >
-                  <motion.div
-                    className="h-full bg-accent"
-                    initial={{ width: "18%" }}
-                    animate={{ width: "72%" }}
-                    transition={{ duration: 3, ease: "linear" }}
-                  />
-                </div>
-              )}
-
+              {/* `relative`, and it is load-bearing. The fill above is
+                  absolutely positioned, and CSS paints positioned elements
+                  over in-flow ones inside the same stacking context — so a
+                  static grid here put every title, goal and duration
+                  underneath the colour, and the demo rendered as four blank
+                  slabs. The real ribbon escapes this by accident: its title
+                  carries `relative` for other reasons. */}
               <div
-                className="grid h-full"
+                className="relative grid h-full"
                 style={{
                   gridTemplateColumns: `${CLOCK_W}px ${RAIL_W}px minmax(0,1fr) auto`,
                 }}
@@ -235,6 +244,26 @@ export function RibbonDemo() {
             </motion.div>
           );
         })}
+
+        {/* Now. Rendered last so it rides over the blocks, and keyed on the
+            beat so the climb restarts each cycle: running, it travels; closed,
+            it holds while the day springs up underneath it. */}
+        <motion.div
+          key={closed ? "now-held" : "now-running"}
+          className="pointer-events-none absolute right-0 z-20 flex items-center"
+          // Travels on a transform, not on `top`: this is the one thing on the
+          // page that moves for three seconds straight, and a layout property
+          // would have it recomputing the card on every frame of that.
+          style={{ top: NOW_FROM, left: CLOCK_W + RAIL_W / 2, marginTop: -3 }}
+          initial={{ y: closed ? NOW_TO - NOW_FROM : 0 }}
+          animate={{ y: NOW_TO - NOW_FROM }}
+          transition={
+            closed ? { duration: 0 } : { duration: 3.2, ease: "linear" }
+          }
+        >
+          <span className="h-1.5 w-1.5 shrink-0 -translate-x-1/2 rounded-plate bg-accent" />
+          <span className="h-px flex-1 bg-accent/45" />
+        </motion.div>
       </div>
 
       <div className="mt-5 flex items-center gap-2 border-t border-grid pt-4 text-micro text-faint">
@@ -243,9 +272,25 @@ export function RibbonDemo() {
             closed ? "bg-accent" : "bg-rule"
           }`}
         />
-        {closed
-          ? "Finished early — the rest of the day moved up."
-          : "One block running. The plan still holds."}
+        {/* Crossfaded in place rather than swapped: the line is part of the
+            loop, and a caption that blinks undoes the calm of everything
+            above it. A fixed height keeps the card from breathing. */}
+        <span className="relative block h-4 flex-1">
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={closed ? "closed" : "running"}
+              className="absolute inset-0 leading-4"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+            >
+              {closed
+                ? "Finished early — the rest of the day moved up."
+                : "One block running. The plan still holds."}
+            </motion.span>
+          </AnimatePresence>
+        </span>
       </div>
     </div>
   );

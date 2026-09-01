@@ -125,31 +125,36 @@ textarea {
    the thumb only ever learns one place. One shared height keeps them from
    drifting apart.
 
-   `--kb` is written by lib/useKeyboardInset: how much of the window the
-   on-screen keyboard is covering, and zero whenever there is none. Both bars
-   read the same variable, so they rise and fall as one object. They used to
-   be a fixed footer over a sticky tab bar, which the keyboard could separate
-   — and did, leaving the whole stack floating with a band of empty screen
-   beneath it after the keyboard had closed. */
+   `--dock` is written by lib/useViewportShift: a signed distance between the
+   bottom edge the browser lays out against and the bottom edge you can
+   actually see. Negative lifts the bars over a keyboard; positive brings them
+   back down when the layout viewport is left short — which is how they ended
+   up hanging above a band of dead screen after a keyboard had closed.
+
+   It is a transform rather than an offset on `bottom` deliberately: `bottom`
+   is measured against the very viewport that goes wrong, so correcting it
+   there is asking the broken ruler to measure itself. */
 :root {
   --tabbar-h: 57px;
-  --kb: 0px;
+  --dock: 0px;
 }
 
 .above-tabs {
   position: fixed;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h) + var(--kb));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h));
   left: 0;
   z-index: 20;
+  transform: translateY(var(--dock));
 }
 
 .tabbar {
   position: fixed;
   right: 0;
-  bottom: var(--kb);
+  bottom: 0;
   left: 0;
   z-index: 30;
+  transform: translateY(var(--dock));
 }
 
 /* The space the fixed tab bar would have taken if it were in the flow. */

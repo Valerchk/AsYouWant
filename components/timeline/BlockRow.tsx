@@ -78,6 +78,9 @@ export function BlockRow({
     ? Math.min(1, (nowMin - placed.startMin) / Math.max(1, placed.endMin - placed.startMin))
     : 0;
   const [dragMin, setDragMin] = useState<number | null>(null);
+  // Held from the moment the grip is taken, rather than from the first
+  // movement, so the well lights up under the thumb that is already on it.
+  const [grabbed, setGrabbed] = useState(false);
   // Motion fires a click after a drag; without this, letting go of a block
   // would also open its editor.
   const moved = useRef(false);
@@ -121,7 +124,10 @@ export function BlockRow({
       className="absolute inset-x-0 z-10"
       style={{ top, height }}
       transition={RIBBON_SPRING}
-      animate={{ opacity: dragMin !== null ? 0.35 : 1 }}
+      // Faded while in flight, so the ghost showing where it lands is the
+      // brighter of the two — but not so faint that the grip under your own
+      // thumb disappears, which is what 0.35 did.
+      animate={{ opacity: dragMin !== null ? 0.55 : 1 }}
     >
       {/* The block itself. Inset by a pixel top and bottom so two blocks that
           abut in time keep a seam of paper between them rather than merging
@@ -338,7 +344,14 @@ export function BlockRow({
 
             {/* Dragging is a deliberate grab, not something the whole row
                 does. Grabbing the body meant every attempt to scroll risked
-                moving a block, and nothing said the gesture existed. */}
+                moving a block.
+
+                Drawn as a grip sunk into a well, because the previous version
+                — two hairlines in the faintest ink the palette has — was
+                indistinguishable from a rule, and a control nobody recognises
+                as a control is a feature that does not exist. The well is
+                paper against the block's tint, so it reads as recessed on a
+                coloured block and on a plain one alike. */}
             {draggable && (
               <motion.button
                 type="button"
@@ -347,13 +360,19 @@ export function BlockRow({
                     ? `Move ${block.title} to another time`
                     : `Reorder ${block.title}`
                 }
-                className="-mr-1 flex h-9 w-7 cursor-grab touch-none items-center justify-center text-faint active:cursor-grabbing"
+                title={
+                  dragMode === "time"
+                    ? "Drag to another hour"
+                    : "Drag to move it up or down the queue"
+                }
+                className="-mr-1 flex h-9 w-8 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
                 drag="y"
                 dragMomentum={false}
                 dragElastic={0}
                 dragConstraints={{ top: 0, bottom: 0 }}
                 onDragStart={() => {
                   moved.current = true;
+                  setGrabbed(true);
                 }}
                 onDrag={(_, info) => {
                   const m = Math.round(minuteAt(info.offset.y) / 15) * 15;
@@ -368,14 +387,23 @@ export function BlockRow({
                   if (dragMode === "time") onMove(block.id, target);
                   else onReorder(block.id, target);
                   setDragMin(null);
+                  setGrabbed(false);
                   onDragPreview(null);
                   setTimeout(() => {
                     moved.current = false;
                   }, 0);
                 }}
-                whileDrag={{ scale: 1.2, color: "var(--color-accent)" }}
+                whileDrag={{ scale: 1.15 }}
               >
-                <Icon name="drag" size={15} />
+                <span
+                  className={`flex h-7 w-[26px] items-center justify-center rounded-edge ring-1 transition-colors ${
+                    grabbed
+                      ? "bg-accent text-paper ring-accent"
+                      : "bg-paper text-ink ring-rule"
+                  }`}
+                >
+                  <Icon name="grip" size={16} />
+                </span>
               </motion.button>
             )}
           </div>

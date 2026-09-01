@@ -169,10 +169,18 @@ const PATHS = {
     </>
   ),
 
-  drag: (
+  /* The grip. Six dots, because that is the shape every phone already uses
+     for "drag me". This replaced two horizontal rules, which is the shape a
+     phone uses for a separator — and is why nobody discovered that a block
+     could be moved at all. */
+  grip: (
     <>
-      <path d="M6 10h12" />
-      <path d="M6 14h12" />
+      <path d="M10 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M16 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M10 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M16 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M10 19a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M16 19a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
     </>
   ),
 
