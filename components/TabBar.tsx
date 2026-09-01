@@ -22,7 +22,9 @@ export function TabBar() {
   // Reads from the same store as the inbox screen, so the badge is right
   // whichever tab you are on.
   const { notes } = useNotes();
-  const inboxCount = notes.length;
+  // Only what is still open: a badge that counts finished thoughts never
+  // reaches zero, and a badge that never reaches zero stops being read.
+  const inboxCount = notes.filter((n) => n.doneAt === null).length;
 
   return (
     <nav className="safe-bottom border-t border-rule bg-paper/95 backdrop-blur-sm">

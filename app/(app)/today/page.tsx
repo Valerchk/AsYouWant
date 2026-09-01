@@ -10,6 +10,7 @@ import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
 import { TemplateSheet } from "@/components/TemplateSheet";
 import { LoadFailure } from "@/components/LoadFailure";
+import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
 import {
@@ -67,6 +68,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   } = useDay(date, nowMin);
 
   const { events } = useCalendar(date);
+  const [footerRef, footerH] = useMeasuredHeight<HTMLElement>();
   const composer = useRef<ComposerHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [goalId, setGoalId] = useState<string | null>(null);
@@ -285,7 +287,9 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const editing = day.blocks.find((b) => b.id === editingId) ?? null;
   const goal = day.threads.find((t) => t.id === goalId) ?? null;
 
-  const intentions = notes.filter((n) => n.plannedFor === date).length;
+  const intentions = notes.filter(
+    (n) => n.plannedFor === date && n.doneAt === null,
+  ).length;
 
   // The day on screen always knows its own count, whatever the week query
   // last saw — otherwise a block added a second ago leaves no mark.
@@ -299,7 +303,12 @@ function DayScreen({ nowMin }: { nowMin: number }) {
 
   return (
     <>
-      <main className="chrome mx-auto max-w-2xl pb-32">
+      <main
+        className="chrome mx-auto max-w-2xl"
+        // Falls back until the footer has been measured, so the first
+        // paint is not a page with no room at the bottom.
+        style={{ paddingBottom: (footerH || 128) + 24 }}
+      >
         <DayHeader
           date={date}
           today={today}
@@ -344,13 +353,18 @@ function DayScreen({ nowMin }: { nowMin: number }) {
       </main>
 
       {/* Pinned within thumb reach, directly above the tabs. */}
-      <footer className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm">
+      <footer
+        ref={footerRef}
+        className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm"
+      >
         <div className="mx-auto max-w-2xl px-6 py-3.5">
           <Composer
             ref={composer}
             threads={day.threads}
             nowMin={nowMin}
             onSubmit={handleAdd}
+            onCreateThread={addThreadNamed}
+            onPatchThread={patchThread}
           />
         </div>
       </footer>

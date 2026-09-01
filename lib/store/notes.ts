@@ -16,6 +16,8 @@ export interface Note {
   createdAt: number;
   /** YYYY-MM-DD when this is an intention for a day; null means someday. */
   plannedFor: string | null;
+  /** Epoch ms when it was ticked off; null while it is still open. */
+  doneAt: number | null;
 }
 
 export function loadNotes(): Note[] {
@@ -46,6 +48,7 @@ export function makeNote(text: string, plannedFor: string | null): Note {
     text: text.trim(),
     createdAt: Date.now(),
     plannedFor,
+    doneAt: null,
   };
 }
 

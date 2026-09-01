@@ -286,7 +286,11 @@ export function createLocalDayStore(): DayStore {
         threads: vault.threads,
         routines: vault.routines,
         templates: vault.templates,
-        notes: loadNotes().map((n) => ({ ...n, plannedFor: n.plannedFor ?? null })),
+        notes: loadNotes().map((n) => ({
+          ...n,
+          plannedFor: n.plannedFor ?? null,
+          doneAt: n.doneAt ?? null,
+        })),
         days: Object.entries(vault.days)
           .map(([date, stored]) => ({ date, blocks: stored.blocks }))
           .sort((a, b) => a.date.localeCompare(b.date)),
@@ -299,7 +303,11 @@ export function createLocalNoteStore(): NoteStore {
   return {
     async load() {
       // Older stored notes predate the field; treat them as someday.
-      return loadNotes().map((n) => ({ ...n, plannedFor: n.plannedFor ?? null }));
+      return loadNotes().map((n) => ({
+        ...n,
+        plannedFor: n.plannedFor ?? null,
+        doneAt: n.doneAt ?? null,
+      }));
     },
     async add(text, plannedFor) {
       const note = makeNote(text, plannedFor);
@@ -317,6 +325,13 @@ export function createLocalNoteStore(): NoteStore {
     async setText(id, text) {
       saveNotes(
         loadNotes().map((n) => (n.id === id ? { ...n, text } : n)),
+      );
+    },
+    async setDone(id, done) {
+      saveNotes(
+        loadNotes().map((n) =>
+          n.id === id ? { ...n, doneAt: done ? Date.now() : null } : n,
+        ),
       );
     },
   };

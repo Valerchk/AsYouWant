@@ -280,6 +280,11 @@ export default function RibbonBench() {
           threads={threads}
           nowMin={nowMin}
           onSubmit={add}
+          onCreateThread={async (name) => {
+            const made: Thread = { id: newId(), name, colorIndex: 0 };
+            return made;
+          }}
+          onPatchThread={() => {}}
         />
       </div>
     </main>

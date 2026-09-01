@@ -93,6 +93,8 @@ export interface NoteData {
   createdAt: number;
   /** YYYY-MM-DD when this is an intention for a day; null means someday. */
   plannedFor: string | null;
+  /** Epoch ms when it was ticked off; null while it is still open. */
+  doneAt: number | null;
 }
 
 export interface NoteStore {
@@ -103,4 +105,6 @@ export interface NoteStore {
   setPlannedFor(id: string, day: string | null): Promise<void>;
   /** A thought is allowed to change its mind. */
   setText(id: string, text: string): Promise<void>;
+  /** Tick it off, or put it back. */
+  setDone(id: string, done: boolean): Promise<void>;
 }

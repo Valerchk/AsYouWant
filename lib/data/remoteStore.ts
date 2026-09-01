@@ -475,6 +475,7 @@ export function createRemoteDayStore(): DayStore {
           text: r.text,
           createdAt: new Date(r.created_at).getTime(),
           plannedFor: r.planned_for,
+          doneAt: r.done_at ? new Date(r.done_at).getTime() : null,
         })),
         days: Array.from(byDay.entries())
           .map(([date, list]) => ({ date, blocks: list }))
@@ -500,6 +501,7 @@ export function createRemoteNoteStore(): NoteStore {
         text: r.text,
         createdAt: new Date(r.created_at).getTime(),
         plannedFor: r.planned_for,
+        doneAt: r.done_at ? new Date(r.done_at).getTime() : null,
       }));
     },
 
@@ -517,6 +519,7 @@ export function createRemoteNoteStore(): NoteStore {
         text: data.text,
         createdAt: new Date(data.created_at).getTime(),
         plannedFor: data.planned_for,
+        doneAt: null,
       };
     },
 
@@ -540,6 +543,15 @@ export function createRemoteNoteStore(): NoteStore {
       const { error } = await supabase
         .from("notes")
         .update({ text: text.trim() })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+
+    async setDone(id: string, done: boolean) {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("notes")
+        .update({ done_at: done ? new Date().toISOString() : null })
         .eq("id", id);
       if (error) throw new Error(error.message);
     },

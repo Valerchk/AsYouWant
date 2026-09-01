@@ -14,6 +14,7 @@ import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, type Thread } from "@/lib/threads";
 import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
+import { GoalStyle } from "@/components/GoalStyle";
 import { SendButton } from "@/components/SendButton";
 
 /* ==========================================================================
@@ -49,7 +50,7 @@ const FIELD_TYPE =
   "font-[family-name:var(--font-mono)] text-base leading-6 tracking-[-0.01em]";
 const FIELD_BOX = "py-3 pl-3 pr-12";
 
-type Panel = "duration" | "time";
+type Panel = "duration" | "time" | "look";
 
 export interface ComposerHandle {
   /** Drop text into the field and put the cursor after it. */
@@ -60,15 +61,18 @@ interface Props {
   threads: Thread[];
   nowMin: number;
   onSubmit: (input: string, threadId: string | null) => void;
+  onCreateThread: (name: string) => Promise<Thread>;
+  onPatchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { threads, nowMin, onSubmit },
+  { threads, nowMin, onSubmit, onCreateThread, onPatchThread },
   ref,
 ) {
   const [value, setValue] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Exposed imperatively rather than as a prop: tapping an open stretch fills
@@ -129,6 +133,23 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setValue((v) => stripThread(v));
   }
 
+  /* Naming a goal and dressing it happen inside the panel that is already
+     open, so a block being written never has to be abandoned to go and set
+     something up first. Two screens for one thought was the complaint. */
+  function createThread() {
+    const name = draft.trim();
+    if (!name) return;
+    setDraft("");
+    onCreateThread(name)
+      .then((made) => {
+        setThreadId(made.id);
+        setValue((v) => stripThread(v));
+      })
+      .catch(() => {
+        // Already on screen: useDay puts the store's error where the day was.
+      });
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!parsed.title) return;
@@ -136,6 +157,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setValue("");
     setThreadId(null);
     setPanel(null);
+    setDraft("");
     inputRef.current?.focus();
   }
 
@@ -172,7 +194,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           >
             {/* A ceiling, not a size. The footer is fixed over the day, and
                 the last thing to grow inside it hid the entire ribbon. */}
-            <div className="max-h-[30dvh] overflow-y-auto pb-3">
+            <div className="max-h-[38dvh] overflow-y-auto pb-3">
               {panel === "duration" && (
                 <div className="flex flex-wrap gap-1.5">
                   {DURATIONS.map((min) => (
@@ -228,6 +250,74 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                     aria-label="Start time"
                     className="num rounded-edge bg-sunk px-2.5 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
                   />
+                </div>
+              )}
+
+              {panel === "look" && (
+                <div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {threads.map((t) => (
+                      <Chip
+                        key={t.id}
+                        active={thread?.id === t.id}
+                        onClick={() => pickThread(t.id)}
+                      >
+                        {isGoalIcon(t.icon) ? (
+                          <GoalIcon
+                            name={t.icon}
+                            size={13}
+                            style={{ color: threadColor(t.colorIndex) }}
+                          />
+                        ) : (
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-plate"
+                            style={{ background: threadColor(t.colorIndex) }}
+                          />
+                        )}
+                        {t.name}
+                      </Chip>
+                    ))}
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <input
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Inside the composer's form: without this, Return
+                        // would send the block instead of naming the goal.
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          createThread();
+                        }
+                      }}
+                      // Three examples rather than a blank prompt: they say
+                      // what size of thing belongs here without a sentence.
+                      placeholder="Work, Study, Health…"
+                      aria-label="Name a new goal"
+                      className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={createThread}
+                      disabled={!draft.trim()}
+                      className="rounded-edge bg-accent px-3 py-2 text-fine text-paper disabled:bg-rule disabled:text-faint"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Colour and icon, in the same panel, for whichever goal is
+                      selected — including one named a second ago. This is the
+                      whole of "pick it and its colour at once". */}
+                  {thread && (
+                    <div className="mt-4 border-t border-grid pt-4">
+                      <GoalStyle
+                        thread={thread}
+                        onPatch={(patch) => onPatchThread(thread.id, patch)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -290,55 +380,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           the thing you want to do, and a day planner that answers "Change my
           address" with a colour swatch has misled you. A goal is only ever
           born from a block that already exists — see BlockSheet. */}
-      {composing && (threads.length > 0 || parsed.threadName) && (
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        {threads.map((t) => {
-          const colour = threadColor(t.colorIndex);
-          const on = thread?.id === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => pickThread(t.id)}
-              className="flex items-center gap-1.5 rounded-edge px-2.5 py-1.5 text-fine transition-colors"
-              style={{
-                // Chosen: wearing its own colour, mixed with paper so the name
-                // stays readable across all sixteen and both themes.
-                background: on
-                  ? `color-mix(in oklab, ${colour} 24%, var(--color-paper))`
-                  : "transparent",
-                boxShadow: on
-                  ? `inset 0 0 0 1.5px ${colour}`
-                  : "inset 0 0 0 1px var(--color-rule)",
-                color: on ? "var(--color-deep)" : "var(--color-ink)",
-              }}
-            >
-              {isGoalIcon(t.icon) ? (
-                <GoalIcon name={t.icon} size={13} style={{ color: colour }} />
-              ) : (
-                <span
-                  className="inline-block h-2 w-2 rounded-plate"
-                  style={{ background: colour }}
-                />
-              )}
-              {t.name}
-            </button>
-          );
-        })}
+      {/* How long, when, and what it is part of.
 
-        {/* A goal typed as a #tag that names nothing yet. It becomes real on
-            send; showing it here keeps the row honest in the meantime. */}
-        {!thread && parsed.threadName && (
-          <span className="rounded-edge px-2.5 py-1.5 text-fine text-faint ring-1 ring-rule ring-dashed">
-            {parsed.threadName} · new
-          </span>
-        )}
-      </div>
-      )}
-
-      {/* How long, and when. */}
+          Animated rather than switched on: the footer is pinned over the day,
+          so a row appearing at full height moves everything above it in one
+          frame, which reads as the page glitching. */}
+      <AnimatePresence initial={false}>
       {composing && (
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: "auto" }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={{ type: "spring", stiffness: 420, damping: 38 }}
+        className="overflow-hidden"
+      >
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <ChipToggle
           open={panel === "duration"}
@@ -361,8 +416,38 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             ? "Anytime"
             : `At ${formatClock(parsed.startMin)}`}
         </ChipToggle>
+
+        <ChipToggle
+          open={panel === "look"}
+          onClick={() => setPanel(panel === "look" ? null : "look")}
+          muted={!thread && !parsed.threadName}
+        >
+          {thread ? (
+            isGoalIcon(thread.icon) ? (
+              <GoalIcon
+                name={thread.icon}
+                size={13}
+                style={{ color: threadColor(thread.colorIndex) }}
+              />
+            ) : (
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-plate"
+                style={{ background: threadColor(thread.colorIndex) }}
+              />
+            )
+          ) : (
+            <Icon name="thread" size={13} />
+          )}
+          {thread
+            ? thread.name
+            : parsed.threadName
+              ? `${parsed.threadName} · new`
+              : "Goal"}
+        </ChipToggle>
       </div>
+      </motion.div>
       )}
+      </AnimatePresence>
     </form>
   );
 });

@@ -100,6 +100,8 @@ type NoteRow = {
   created_at: string;
   /** NULL is "someday"; a date makes it an intention for that day. */
   planned_for: string | null;
+  /** When it was ticked off. NULL means still open (migration 0005). */
+  done_at: string | null;
 };
 
 type PushSubscriptionRow = {
@@ -150,7 +152,7 @@ export interface Database {
       >;
       routines: Table<RoutineRow, "id" | "created_at" | "kind" | "thread_id">;
       day_templates: Table<DayTemplateRow, "id" | "created_at">;
-      notes: Table<NoteRow, "id" | "created_at" | "planned_for">;
+      notes: Table<NoteRow, "id" | "created_at" | "planned_for" | "done_at">;
       push_subscriptions: Table<
         PushSubscriptionRow,
         "id" | "fail_count" | "last_ok_at" | "created_at"
