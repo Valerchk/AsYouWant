@@ -104,5 +104,8 @@ export function carriedCopy(block: Block): Omit<Block, "id" | "sortOrder"> {
     actualStartMin: null,
     actualEndMin: null,
     routineId: null,
+    // The copy is the same block on another day, so it keeps its face.
+    colorIndex: block.colorIndex ?? null,
+    icon: block.icon ?? null,
   };
 }

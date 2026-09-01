@@ -74,6 +74,11 @@ export const viewport: Viewport = {
   // by accident mid-drag.
   maximumScale: 1,
   userScalable: false,
+  // Let the on-screen keyboard shrink the layout viewport where the browser
+  // supports it, so a bar pinned to the bottom lands above the keyboard on
+  // its own. iOS ignores this and is handled by lib/useKeyboardInset; the two
+  // agree, because that hook measures zero precisely when this works.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

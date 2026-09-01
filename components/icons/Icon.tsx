@@ -127,6 +127,48 @@ const PATHS = {
     </>
   ),
 
+  /* Settings. A dial with eight teeth — the one glyph everybody already
+     knows. The tab used to be drawn with the duration mark (⊢—⊣), which is
+     the icon for how long a block is, so "settings" and "45 minutes" were
+     the same picture. */
+  gear: (
+    <>
+      <path d="M19 12a7 7 0 1 1-14 0 7 7 0 0 1 14 0" />
+      <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+      <path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6" />
+      <path d="M5.2 5.2l1.9 1.9M16.9 16.9l1.9 1.9M18.8 5.2l-1.9 1.9M7.1 16.9l-1.9 1.9" />
+    </>
+  ),
+
+  /* Everything else, behind one button. Three stops on a line. */
+  more: (
+    <>
+      <path d="M7 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+      <path d="M19 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+    </>
+  ),
+
+  /* A tray with a notch in its lip: things land here and wait. Distinct from
+     `template`, which the inbox tab was borrowing while the templates button
+     used the same shape two inches away. */
+  inbox: (
+    <>
+      <path d="M3 13l2.5-8h13L21 13v6H3z" />
+      <path d="M3 13h5l1 2h6l1-2h5" />
+    </>
+  ),
+
+  /* Colour and icon: a swatch card, four chips on it. */
+  swatch: (
+    <>
+      <path d="M4 4h7v7H4z" />
+      <path d="M13 4h7v7h-7z" />
+      <path d="M4 13h7v7H4z" />
+      <path d="M13 13h7v7h-7z" />
+    </>
+  ),
+
   drag: (
     <>
       <path d="M6 10h12" />

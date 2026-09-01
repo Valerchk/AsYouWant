@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { buildGeometry, minuteForY, yForMinute } from "@/lib/timeline/geometry";
 import { threadById, type Thread } from "@/lib/threads";
+import { blockLook } from "@/lib/blocks/look";
 import { BlockRow, type DragPreview } from "./BlockRow";
 import { GapStrip } from "./GapStrip";
 import { PastStrip } from "./PastStrip";
@@ -23,8 +24,6 @@ interface Props {
   onToggleDone: (blockId: string) => void;
   onStart: (blockId: string) => void;
   onOpenBlock: (blockId: string) => void;
-  /** The goal's mark on a block was tapped. */
-  onOpenThread: (threadId: string) => void;
   /** A stretch of open time was tapped: start a block of this length here. */
   onFillGap: (startMin: number, minutes: number) => void;
   onPushToTomorrow: (blockId: string) => void;
@@ -45,7 +44,6 @@ export function Ribbon({
   onToggleDone,
   onStart,
   onOpenBlock,
-  onOpenThread,
   onFillGap,
   onPushToTomorrow,
   onDrop,
@@ -126,13 +124,15 @@ export function Ribbon({
                 key={seg.key}
                 segment={seg}
                 nowMin={nowMin}
-                thread={threadById(threads, seg.placed.block.threadId)}
+                look={blockLook(
+                  seg.placed.block,
+                  threadById(threads, seg.placed.block.threadId),
+                )}
                 slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
                 startable={startableId === seg.placed.block.id}
                 onToggleDone={onToggleDone}
                 onStart={onStart}
                 onOpen={onOpenBlock}
-                onOpenThread={onOpenThread}
                 minuteAt={(offsetY) => minuteForY(geo, seg.top + offsetY)}
                 onMove={onMoveBlock}
                 onReorder={onReorderBlock}

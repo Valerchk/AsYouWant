@@ -67,8 +67,11 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* The demo carries the argument; it runs on its own. */}
-          <div className="rounded-plate bg-sunk/50 p-5 ring-1 ring-rule">
+          {/* The demo carries the argument; it runs on its own. `self-start`
+              keeps the card the height of the day inside it — stretched to
+              match the column of prose beside it, it ended in a hand's width
+              of empty panel. */}
+          <div className="self-start rounded-plate bg-sunk/50 p-5 ring-1 ring-rule">
             <RibbonDemo />
           </div>
         </section>
@@ -108,15 +111,15 @@ export default function Landing() {
           <div>
             <div className="mb-3 flex items-center gap-2 text-accent">
               <Icon name="thread" size={17} />
-              <h2 className="text-lede text-deep">Goals run through the day</h2>
+              <h2 className="text-lede text-deep">Goals are the long view</h2>
             </div>
             <p className="text-base leading-7 text-ink">
-              Every block can sit on a thread — a goal that runs down the whole
-              day beside your work. You can see at a glance which one today is
-              actually feeding.
+              Every block wears its own colour, chosen as you write it — nothing
+              to set up first. Say a block is part of something bigger and the
+              week starts keeping count of its own accord.
             </p>
             <p className="mt-4 text-base leading-7 text-faint">
-              A busy day and a useful day look completely different here, and
+              A busy week and a useful week look completely different here, and
               that is the point.
             </p>
           </div>

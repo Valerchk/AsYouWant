@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LoadFailure } from "@/components/LoadFailure";
+import { ListSkeleton } from "@/components/Skeleton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatClock, formatDuration } from "@/lib/time";
 import { createClient } from "@/lib/supabase/client";
@@ -110,13 +111,7 @@ export default function Settings() {
 
   if (error) return <LoadFailure what="your settings" message={error} />;
 
-  if (!prefs) {
-    return (
-      <main className="chrome mx-auto max-w-2xl px-6 pt-7">
-        <div className="num text-micro text-faint">LOADING</div>
-      </main>
-    );
-  }
+  if (!prefs) return <ListSkeleton title={140} rows={6} />;
 
   const quiet = prefs.quietFromMin !== null && prefs.quietToMin !== null;
 

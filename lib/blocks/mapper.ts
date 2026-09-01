@@ -23,6 +23,8 @@ export function toBlock(row: BlockRow): Block {
     actualStartMin: row.actual_start_min,
     actualEndMin: row.actual_end_min,
     routineId: row.routine_id,
+    colorIndex: row.color_index,
+    icon: row.icon,
   };
 }
 

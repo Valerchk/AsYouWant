@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Icon } from "@/components/icons/Icon";
 import { SendButton } from "@/components/SendButton";
 import { LoadFailure } from "@/components/LoadFailure";
+import { ListSkeleton } from "@/components/Skeleton";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd, DEFAULT_DURATION_MIN } from "@/lib/parse/quickAdd";
 import { formatClock, formatDuration, localDay } from "@/lib/time";
@@ -31,7 +32,7 @@ import type { NoteData } from "@/lib/data/types";
 
 export default function Inbox() {
   const nowMin = useNowMin();
-  if (nowMin === CLOCK_NOT_READY) return <main className="min-h-dvh bg-paper" />;
+  if (nowMin === CLOCK_NOT_READY) return <ListSkeleton title={96} rows={5} />;
   return <InboxScreen nowMin={nowMin} />;
 }
 
@@ -104,6 +105,9 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
   }
 
   if (error) return <LoadFailure what="your inbox" message={error} />;
+  // One state for the whole screen rather than the word LOADING under a
+  // heading while the section above it already claimed to be empty.
+  if (loading) return <ListSkeleton title={96} rows={5} />;
 
   const rowProps = (note: NoteData) => ({
     note,
@@ -180,9 +184,7 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
               hint="Caught, but not for today."
               count={someday.length}
             />
-            {loading ? (
-              <div className="num text-micro text-faint">LOADING</div>
-            ) : someday.length === 0 ? (
+            {someday.length === 0 ? (
               <Empty>
                 Anything you catch without choosing a day lands here, and waits
                 without asking anything of you.

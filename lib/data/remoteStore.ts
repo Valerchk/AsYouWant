@@ -13,8 +13,8 @@ import type {
   NewBlock,
   NoteData,
   NoteStore,
+  Spend,
   TemplateBlock,
-  WeekSpend,
 } from "./types";
 
 type BlockUpdate = Database["public"]["Tables"]["blocks"]["Update"];
@@ -58,6 +58,8 @@ function toRow(
     actual_end_min: block.actualEndMin,
     sort_order: sortOrder,
     routine_id: block.routineId ?? null,
+    color_index: block.colorIndex ?? null,
+    icon: block.icon ?? null,
   };
 }
 
@@ -214,6 +216,8 @@ export function createRemoteDayStore(): DayStore {
       if (patch.threadId !== undefined) row.thread_id = patch.threadId;
       if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
       if (patch.routineId !== undefined) row.routine_id = patch.routineId;
+      if (patch.colorIndex !== undefined) row.color_index = patch.colorIndex;
+      if (patch.icon !== undefined) row.icon = patch.icon;
       if (patch.actualStartMin !== undefined) {
         row.actual_start_min = patch.actualStartMin;
       }
@@ -304,9 +308,9 @@ export function createRemoteDayStore(): DayStore {
       if (error) throw new Error(error.message);
     },
 
-    async loadWeek(endDay): Promise<WeekSpend> {
+    async loadSpend(fromDay, toDay): Promise<Spend> {
       const supabase = createClient();
-      const fromDay = addDays(endDay, -6);
+      const endDay = toDay;
 
       const { data, error } = await supabase
         .from("blocks")
@@ -332,7 +336,7 @@ export function createRemoteDayStore(): DayStore {
 
       return {
         totals,
-        days: Array.from({ length: 7 }, (_, i) => {
+        days: Array.from({ length: daysBetween(fromDay, endDay) + 1 }, (_, i) => {
           const date = addDays(fromDay, i);
           return { date, byThread: perDay.get(date) ?? new Map() };
         }),

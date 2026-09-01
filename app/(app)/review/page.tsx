@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
 import { LoadFailure } from "@/components/LoadFailure";
+import { ListSkeleton } from "@/components/Skeleton";
 import {
   DayCrossSection,
   type Strand,
 } from "@/components/review/DayCrossSection";
 import { addDays, formatDuration, localDay } from "@/lib/time";
 import { threadColor } from "@/lib/threads";
+import { blockLook } from "@/lib/blocks/look";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { useDay } from "@/lib/data/useDay";
 
@@ -18,7 +20,7 @@ import { useDay } from "@/lib/data/useDay";
 
 export default function Review() {
   const nowMin = useNowMin();
-  if (nowMin === CLOCK_NOT_READY) return <main className="min-h-dvh bg-paper" />;
+  if (nowMin === CLOCK_NOT_READY) return <ListSkeleton title={112} rows={4} />;
   return <ReviewScreen nowMin={nowMin} />;
 }
 
@@ -31,25 +33,34 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
     const blocks = day?.blocks ?? [];
     const done = blocks.filter((b) => b.status === "done");
 
-    const byThread = new Map<string | null, number>();
+    /* Blocks that belong to a goal are gathered under it; blocks that belong
+       to nothing stand for themselves, wearing the colour they were given.
+       Lumping the latter into one grey "Unthreaded" ring made the cut useless
+       for anyone who simply colours their blocks and keeps no goals — which,
+       now that a block needs no goal to have a face, is most people. */
+    const groups = new Map<string, Strand>();
     for (const b of done) {
       const spent =
         b.actualEndMin !== null && b.actualStartMin !== null
           ? b.actualEndMin - b.actualStartMin
           : b.plannedMin;
-      byThread.set(b.threadId, (byThread.get(b.threadId) ?? 0) + spent);
+      const thread = day?.threads.find((t) => t.id === b.threadId) ?? null;
+      const key = thread ? `t:${thread.id}` : `b:${b.id}`;
+      const seen = groups.get(key);
+      if (seen) {
+        seen.minutes += spent;
+        continue;
+      }
+      groups.set(key, {
+        key,
+        threadId: thread?.id ?? null,
+        name: thread?.name ?? b.title,
+        colorIndex: blockLook(b, thread).colorIndex,
+        minutes: spent,
+      });
     }
 
-    const list: Strand[] = [...byThread.entries()]
-      .map(([threadId, minutes]) => {
-        const thread = day?.threads.find((t) => t.id === threadId);
-        return {
-          threadId,
-          name: thread?.name ?? "Unthreaded",
-          colorIndex: thread?.colorIndex ?? 0,
-          minutes,
-        };
-      })
+    const list: Strand[] = [...groups.values()]
       // Thickest first, so the ring nearest the core is what the day was for.
       .sort((a, b) => b.minutes - a.minutes);
 
@@ -72,17 +83,12 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
 
   if (error) return <LoadFailure what="your day" message={error} />;
 
-  if (loading || !day) {
-    return (
-      <main className="chrome mx-auto max-w-2xl px-6 pt-7">
-        <div className="num text-micro text-faint">LOADING</div>
-      </main>
-    );
-  }
+  if (loading || !day) return <ListSkeleton title={112} rows={4} />;
 
   const untouched = (day.threads ?? []).filter(
     (t) => !strands.some((s) => s.threadId === t.id),
   );
+  const goalsFed = strands.filter((s) => s.threadId !== null).length;
 
   return (
     <main className="chrome mx-auto max-w-2xl px-6 pb-32">
@@ -143,22 +149,25 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
           </div>
 
           <p className="mt-8 text-center text-lede leading-7 text-deep">
-            {formatDuration(doneMin)} closed, across{" "}
-            {strands.length === 1 ? "one goal" : `${strands.length} goals`}.
+            {formatDuration(doneMin)} closed
+            {goalsFed > 0 &&
+              `, feeding ${goalsFed === 1 ? "one goal" : `${goalsFed} goals`}`}
+            .
           </p>
 
           <ul className="mt-8">
             {strands.map((s) => (
               <li
-                key={s.threadId ?? "none"}
+                key={s.key}
                 className="flex items-center gap-3 border-b border-grid py-3"
               >
                 <span
                   className="h-6 w-[3px] shrink-0"
                   style={{
-                    background: s.threadId
-                      ? threadColor(s.colorIndex)
-                      : "var(--color-rule)",
+                    background:
+                      s.colorIndex === null
+                        ? "var(--color-rule)"
+                        : threadColor(s.colorIndex),
                   }}
                 />
                 <span className="min-w-0 flex-1 truncate text-base text-ink">

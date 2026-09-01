@@ -24,8 +24,9 @@ export interface DayData {
 /** A block before the store has given it an id and a position. */
 export type NewBlock = Omit<Block, "id" | "sortOrder">;
 
-export interface WeekSpend {
-  /** Minutes per goal across the whole week, keyed by goal id. */
+/** Closed minutes over a span of days, per goal. */
+export interface Spend {
+  /** Minutes per goal across the whole span, keyed by goal id. */
   totals: Map<string, number>;
   /** Oldest day first, so a bar chart reads left to right. */
   days: { date: string; byThread: Map<string, number> }[];
@@ -44,8 +45,12 @@ export interface DayStore {
   /** Retire a goal without touching the blocks that already reference it. */
   archiveThread(id: string): Promise<void>;
   deleteBlock(id: string): Promise<void>;
-  /** Seven days ending on `endDay`: totals per goal, and the daily breakdown. */
-  loadWeek(endDay: string): Promise<WeekSpend>;
+  /**
+   * Closed minutes per goal between two days, inclusive, with the daily
+   * breakdown. Takes a range rather than "the last seven days" because goals
+   * are read over a month as readily as over a week.
+   */
+  loadSpend(fromDay: string, toDay: string): Promise<Spend>;
   /** How many blocks each day in the range holds. Drives the week strip. */
   loadCounts(fromDay: string, toDay: string): Promise<Map<string, number>>;
 
@@ -76,6 +81,9 @@ export interface TemplateBlock {
   startMin: number | null;
   plannedMin: number;
   threadId: string | null;
+  /** Optional: templates saved before blocks had a look of their own. */
+  colorIndex?: number | null;
+  icon?: string | null;
 }
 
 export interface ExportBundle {

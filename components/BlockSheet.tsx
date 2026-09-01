@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { Sheet } from "@/components/Sheet";
-import { GoalStyle } from "@/components/GoalStyle";
+import { BlockLook } from "@/components/BlockLook";
 import { Icon } from "@/components/icons/Icon";
 import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, type Thread } from "@/lib/threads";
@@ -38,8 +38,8 @@ interface Props {
   onDelete: (id: string) => void;
   onStart: (id: string) => void;
   onCarry: (block: Block) => void;
-  onPatchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
-  /** The only place a goal is ever born: looking at a block that needs one. */
+  /** Making a goal from here keeps the block in view; it is styled on its
+      own tab, where a goal is a week rather than an afternoon. */
   onCreateThread: (name: string) => Promise<Thread>;
   /** Turning any weekday on makes this block a routine. */
   onRepeat: (block: Block, mask: number) => void;
@@ -66,7 +66,6 @@ function SheetBody({
   onDelete,
   onStart,
   onCarry,
-  onPatchThread,
   onCreateThread,
   onRepeat,
 }: Props & { block: Block }) {
@@ -143,6 +142,23 @@ function SheetBody({
           <span className="text-fine">Start it now</span>
         </button>
       )}
+
+      {/* ---- look ----
+
+           First, and available the instant a block exists. It used to be
+           reachable only through a goal, which meant telling two afternoons
+           apart began with inventing something to file them under. */}
+      <Section label="Look">
+        <BlockLook
+          look={{ colorIndex: block.colorIndex ?? null, icon: block.icon ?? null }}
+          onChange={(patch) => onPatch(block.id, patch)}
+          inherited={
+            thread
+              ? { colorIndex: thread.colorIndex, icon: thread.icon ?? null }
+              : undefined
+          }
+        />
+      </Section>
 
       {/* ---- duration ---- */}
       <Section label="Duration">
@@ -252,12 +268,10 @@ function SheetBody({
 
       {/* ---- thread ----
 
-           "Part of", not "Goal". Asked here, next to a block that already
-           exists, the question can only be read at the right scale: nobody
-           looking at a block called "Change my address" answers it by making
-           a goal of the same name. Asked on an empty screen, with a plus and
-           a row of colours, that is exactly what people answer — which is how
-           a task ended up wearing a house icon and never reaching the day. */}
+           "Part of", not "Goal", and optional. A goal is the long arc — what
+           a week or a month was for — and it is reviewed on its own tab. This
+           only says which arc this hour fed, and a block that answers nothing
+           is a perfectly good block. */}
       <Section label="Part of">
         <div className="flex flex-wrap gap-1.5">
           <Chip
@@ -314,16 +328,11 @@ function SheetBody({
           </div>
         )}
 
-        {/* Restyling a goal here changes it everywhere that goal appears — it
-            belongs to the goal, not to this block. */}
-        {thread && (
-          <div className="mt-4 border-t border-grid pt-4">
-            <GoalStyle
-              thread={thread}
-              onPatch={(patch) => onPatchThread(thread.id, patch)}
-            />
-          </div>
-        )}
+        <p className="mt-2 text-micro text-faint">
+          {thread
+            ? `Counts towards ${thread.name} on the Goals tab. The colour above is this block's own — change the goal's on its tab.`
+            : "Nothing has to go here. Goals are for the week, not the afternoon."}
+        </p>
       </Section>
 
       {/* ---- moving it out of this day ---- */}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Ribbon } from "@/components/timeline/Ribbon";
-import { Composer } from "@/components/Composer";
+import { Composer, type ComposerDraft } from "@/components/Composer";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
@@ -121,7 +121,7 @@ export default function RibbonBench() {
     );
   }
 
-  function add(input: string, threadId: string | null) {
+  function add(input: string, draft: ComposerDraft) {
     const { parsed } = parseQuickAdd(input);
     const typed =
       threads.find(
@@ -138,9 +138,11 @@ export default function RibbonBench() {
         plannedMin: parsed.plannedMin,
         status: "planned",
         sortOrder: prev.length + 1,
-        threadId: threadId ?? typed?.id ?? null,
+        threadId: draft.threadId ?? typed?.id ?? null,
         actualStartMin: null,
         actualEndMin: null,
+        colorIndex: draft.colorIndex,
+        icon: draft.icon,
       },
     ]);
   }
@@ -240,7 +242,6 @@ export default function RibbonBench() {
         onToggleDone={toggleDone}
         onStart={start}
         onOpenBlock={() => {}}
-        onOpenThread={() => {}}
         onReorderBlock={(id, targetMin) => {
           // The bench has no store, so ordering is applied straight to state.
           const queue = result.placed
@@ -276,16 +277,7 @@ export default function RibbonBench() {
       />
 
       <div className="mt-10">
-        <Composer
-          threads={threads}
-          nowMin={nowMin}
-          onSubmit={add}
-          onCreateThread={async (name) => {
-            const made: Thread = { id: newId(), name, colorIndex: 0 };
-            return made;
-          }}
-          onPatchThread={() => {}}
-        />
+        <Composer threads={threads} nowMin={nowMin} onSubmit={add} />
       </div>
     </main>
   );

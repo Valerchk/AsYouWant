@@ -123,17 +123,83 @@ textarea {
 
 /* Both screens put their input in the same spot, directly above the tabs, so
    the thumb only ever learns one place. One shared height keeps them from
-   drifting apart. */
+   drifting apart.
+
+   `--kb` is written by lib/useKeyboardInset: how much of the window the
+   on-screen keyboard is covering, and zero whenever there is none. Both bars
+   read the same variable, so they rise and fall as one object. They used to
+   be a fixed footer over a sticky tab bar, which the keyboard could separate
+   — and did, leaving the whole stack floating with a band of empty screen
+   beneath it after the keyboard had closed. */
 :root {
   --tabbar-h: 57px;
+  --kb: 0px;
 }
 
 .above-tabs {
   position: fixed;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h) + var(--kb));
   left: 0;
   z-index: 20;
+}
+
+.tabbar {
+  position: fixed;
+  right: 0;
+  bottom: var(--kb);
+  left: 0;
+  z-index: 30;
+}
+
+/* The space the fixed tab bar would have taken if it were in the flow. */
+.tabbar-gap {
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ==========================================================================
+   Waiting
+   ========================================================================== */
+
+/* A page that is still loading shows its own shape rather than the word
+   LOADING in a corner: same rules, same rhythm, no ink. The sweep is a
+   background position, so it never lays out and never repaints text. */
+@keyframes sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.sweep {
+  background-color: var(--color-sunk);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-grid) 70%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: sweep 1.6s var(--ease-instrument) infinite;
+}
+
+/* The colon between the hours and the minutes, breathing once a second, so a
+   glance at a still screen can tell a live clock from a printed time. */
+@keyframes tick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.tick {
+  animation: tick 2s var(--ease-instrument) infinite;
 }
 
 /* ==========================================================================

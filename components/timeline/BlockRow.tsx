@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { BlockSegment } from "@/lib/timeline/geometry";
 import { formatClock, formatDuration } from "@/lib/time";
-import { threadColor, type Thread } from "@/lib/threads";
+import { lookColor, type Look } from "@/lib/blocks/look";
 import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
 import { CLOCK_W, RAIL_W, RIBBON_SPRING } from "./motion";
@@ -18,7 +18,8 @@ interface Props {
   segment: BlockSegment;
   /** Used to show how far through the running block we are. */
   nowMin: number;
-  thread: Thread | null;
+  /** Colour and icon, already resolved against the block's goal. */
+  look: Look;
   /** Minutes this block handed back by finishing early. */
   slackMin: number;
   /** True for the one block that may be started right now. */
@@ -26,8 +27,6 @@ interface Props {
   onToggleDone: (blockId: string) => void;
   onStart: (blockId: string) => void;
   onOpen: (blockId: string) => void;
-  /** Tapping the goal's mark opens the goal, not the block. */
-  onOpenThread: (threadId: string) => void;
   /** Pixel offset → the minute it lands on. Non-linear, so it comes from
       geometry rather than from dividing by a scale factor. */
   minuteAt: (offsetY: number) => number;
@@ -41,13 +40,12 @@ interface Props {
 export function BlockRow({
   segment,
   nowMin,
-  thread,
+  look,
   slackMin,
   startable,
   onToggleDone,
   onStart,
   onOpen,
-  onOpenThread,
   minuteAt,
   onMove,
   onReorder,
@@ -84,29 +82,31 @@ export function BlockRow({
   // would also open its editor.
   const moved = useRef(false);
 
-  const colour = thread ? threadColor(thread.colorIndex) : "var(--color-rule)";
+  const own = lookColor(look);
+  const colour = own ?? "var(--color-rule)";
   const accent = isRunning
     ? overrunMin > 0
       ? "var(--color-over)"
       : "var(--color-accent)"
     : colour;
 
-  /* The block is filled with its goal's colour, which is what lets a day be
-     read as a distribution of time from across the room — and what made a
-     separate row of goals unnecessary.
+  /* The block is filled with its own colour, which is what lets a day be read
+     as a distribution of time from across the room. The colour is the block's
+     — chosen while writing it, or inherited from its goal when it has one and
+     said nothing itself.
 
      Mixed with paper rather than laid down at full strength, and that is not
      timidity: in the light theme the palette runs to mid tones (#b0741c,
      #2a6fa8) where white text falls to about 3:1, and in the dark theme the
-     same threads are pale (#e0a94d) where ink text fails instead. One mix
+     same colours are pale (#e0a94d) where ink text fails instead. One mix
      keeps every one of the sixteen readable in both themes without a second
      hand-tuned token per colour. Full strength is spent where it costs
-     nothing: the thread on the rail, the goal's icon, the progress line. */
+     nothing: the rail, the icon, the progress line. */
   const strength = done ? 10 : holdsNow ? 30 : 20;
   const fill = external
     ? "transparent"
-    : thread
-      ? `color-mix(in oklab, ${colour} ${strength}%, var(--color-paper))`
+    : own
+      ? `color-mix(in oklab, ${own} ${strength}%, var(--color-paper))`
       : done
         ? "transparent"
         : "var(--color-sunk)";
@@ -271,28 +271,19 @@ export function BlockRow({
                 <span className="truncate">calendar</span>
               </span>
             ) : (
-              thread && (
-                /* A mark, not a word. The block is already wearing the goal's
-                   colour, so printing the goal's name underneath said the same
-                   thing a second time and cost the row a line of text it could
-                   not spare. The mark is still the way in: tapping it opens
-                   the goal, and the list behind the header is the legend. */
-                <button
-                  type="button"
-                  onClick={() => onOpenThread(thread.id)}
-                  aria-label={`Open ${thread.name}`}
-                  title={thread.name}
-                  className="pointer-events-auto -m-1 flex shrink-0 items-center p-1"
-                >
-                  {isGoalIcon(thread.icon) ? (
-                    <GoalIcon name={thread.icon} size={14} style={{ color: colour }} />
-                  ) : (
-                    <span
-                      className="block h-2.5 w-2.5 rounded-plate"
-                      style={{ boxShadow: `inset 0 0 0 1.5px ${colour}` }}
-                    />
-                  )}
-                </button>
+              /* A mark, not a word. The block is already wearing its colour,
+                 so a name underneath would say the same thing twice and cost
+                 the row a line of text it cannot spare. Drawn only when there
+                 is an icon: an empty ring beside a coloured block was one more
+                 thing to look at that said nothing. */
+              isGoalIcon(look.icon) && (
+                <span className="flex shrink-0 items-center">
+                  <GoalIcon
+                    name={look.icon}
+                    size={14}
+                    style={{ color: colour }}
+                  />
+                </span>
               )
             )}
 

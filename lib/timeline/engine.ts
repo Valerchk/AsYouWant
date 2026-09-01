@@ -33,6 +33,15 @@ export interface Block {
   /** The routine that grew this block, if any. */
   routineId?: string | null;
   /**
+   * How the block looks, on the block itself.
+   *
+   * Null on either field means "borrow it from my goal" — see lib/blocks/look.
+   * They live here rather than only on the goal because being able to tell one
+   * block from another must not require inventing a goal first.
+   */
+  colorIndex?: number | null;
+  icon?: string | null;
+  /**
    * Comes from a subscribed calendar rather than from this app.
    *
    * The engine treats it as an ordinary anchor — it occupies its hour, and

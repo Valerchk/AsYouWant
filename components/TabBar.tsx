@@ -8,13 +8,21 @@ import { useNotes } from "@/lib/data/useNotes";
 
 /* Bottom tabs, in thumb reach.
 
-   Two, not three. Goals used to sit here as a third, which made them read as
-   somewhere you had to go before planning anything; they now live on the day
-   itself, where you can see what they have had. */
+   Three, and the third is Goals again — but the reason it was wrong the first
+   time is gone. Goals used to be a prerequisite: a block could not be told
+   apart from its neighbour, or filed anywhere, until you had been here and
+   invented one. Now a block carries its own colour and its own icon, and this
+   tab holds only the long view — what a week or a month was actually for. It
+   is somewhere you go on Sunday, not somewhere you have to go before Tuesday.
+
+   Fixed rather than sticky, and offset by the same --kb the composer uses, so
+   the two bars are one object as far as the keyboard is concerned. As a
+   sticky element over a fixed footer they could and did come apart. */
 
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/today", label: "Today", icon: "flow" },
-  { href: "/inbox", label: "Inbox", icon: "template" },
+  { href: "/inbox", label: "Inbox", icon: "inbox" },
+  { href: "/goals", label: "Goals", icon: "thread" },
 ];
 
 export function TabBar() {
@@ -27,7 +35,7 @@ export function TabBar() {
   const inboxCount = notes.filter((n) => n.doneAt === null).length;
 
   return (
-    <nav className="safe-bottom border-t border-rule bg-paper/95 backdrop-blur-sm">
+    <nav className="tabbar safe-bottom border-t border-rule bg-paper/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-2xl">
         {TABS.map((tab) => {
           const active = pathname === tab.href;

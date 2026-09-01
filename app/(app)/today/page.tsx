@@ -2,14 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ribbon } from "@/components/timeline/Ribbon";
-import { Composer, type ComposerHandle } from "@/components/Composer";
+import {
+  Composer,
+  type ComposerDraft,
+  type ComposerHandle,
+} from "@/components/Composer";
 import { DayHeader } from "@/components/DayHeader";
-import { GoalsSheet } from "@/components/GoalsSheet";
-import { GoalSheet } from "@/components/GoalSheet";
+import { DayMenu } from "@/components/DayMenu";
 import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
 import { TemplateSheet } from "@/components/TemplateSheet";
 import { LoadFailure } from "@/components/LoadFailure";
+import { DaySkeleton } from "@/components/Skeleton";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
@@ -25,7 +29,6 @@ import { dayStore } from "@/lib/data";
 import { useDay } from "@/lib/data/useDay";
 import { useCalendar } from "@/lib/data/useCalendar";
 import { useNotes } from "@/lib/data/useNotes";
-import type { WeekSpend } from "@/lib/data/types";
 
 /* The day. Everything goes through useDay, which reads from Supabase when it
    is configured and from browser storage until then — this screen never knows
@@ -34,10 +37,10 @@ import type { WeekSpend } from "@/lib/data/types";
 export default function Today() {
   const nowMin = useNowMin();
 
-  // One frame before the clock exists, matching the server output exactly.
-  if (nowMin === CLOCK_NOT_READY) {
-    return <main className="min-h-dvh bg-paper" />;
-  }
+  // One frame before the clock exists. It used to be a blank sheet, which is
+  // the flash that made every load look broken; the skeleton is the same
+  // shape the day will be, so nothing jumps when it arrives.
+  if (nowMin === CLOCK_NOT_READY) return <DaySkeleton />;
 
   return <DayScreen nowMin={nowMin} />;
 }
@@ -59,8 +62,6 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     reorderFlow,
     carryTo,
     deleteBlock,
-    patchThread,
-    archiveThread,
     addThreadNamed,
     saveRoutine,
     deleteRoutine,
@@ -71,30 +72,19 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const [footerRef, footerH] = useMeasuredHeight<HTMLElement>();
   const composer = useRef<ComposerHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [goalId, setGoalId] = useState<string | null>(null);
-  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
   // Intentions live in the Inbox but belong to today; the header carries the
   // count so the ribbon never has to make room for them.
   const { notes } = useNotes();
 
-  /* What each goal has actually had this week, and which days hold anything.
-     Both are read once per week rather than per minute: the shape of a week
-     changes far more slowly than the clock does. */
-  const [week, setWeek] = useState<WeekSpend | null>(null);
+  /* Which days of the visible week hold anything. Read once per week rather
+     than per minute: the shape of a week changes far more slowly than the
+     clock does. */
   const [weekCounts, setWeekCounts] = useState<Map<string, number>>(new Map());
   const visibleWeek = useMemo(() => weekOf(date), [date]);
   const weekKey = visibleWeek[0];
-
-  useEffect(() => {
-    dayStore()
-      .loadWeek(today)
-      .then(setWeek)
-      .catch(() => {
-        // A missing week costs the goal strip its numbers and nothing else.
-      });
-  }, [today]);
 
   useEffect(() => {
     dayStore()
@@ -128,7 +118,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     [blocks, day?.dayStartMin, day?.dayEndMin, engineNow],
   );
 
-  function handleAdd(input: string, threadId: string | null) {
+  function handleAdd(input: string, draft: ComposerDraft) {
     const { parsed } = parseQuickAdd(input);
     const block = {
       title: parsed.title,
@@ -136,14 +126,16 @@ function DayScreen({ nowMin }: { nowMin: number }) {
       startMin: parsed.startMin,
       plannedMin: parsed.plannedMin,
       status: "planned" as const,
-      threadId,
+      threadId: draft.threadId,
       actualStartMin: null,
       actualEndMin: null,
+      colorIndex: draft.colorIndex,
+      icon: draft.icon,
     };
 
     // A goal picked from the chip is already real. A #tag that names no
     // existing goal creates one, so typing stays a complete path of its own.
-    if (threadId) addBlock(block);
+    if (draft.threadId) addBlock(block);
     else addBlockWithThread(block, parsed.threadName);
   }
 
@@ -272,20 +264,13 @@ function DayScreen({ nowMin }: { nowMin: number }) {
 
   if (error) return <LoadFailure what="your day" message={error} />;
 
-  if (loading || !day) {
-    return (
-      <main className="chrome mx-auto max-w-2xl px-6 pt-7">
-        <div className="num text-micro text-faint">LOADING</div>
-      </main>
-    );
-  }
+  if (loading || !day) return <DaySkeleton />;
 
   const plannedMin = day.blocks
     .filter((b) => b.status === "planned" || b.status === "active")
     .reduce((sum, b) => sum + b.plannedMin, 0);
 
   const editing = day.blocks.find((b) => b.id === editingId) ?? null;
-  const goal = day.threads.find((t) => t.id === goalId) ?? null;
 
   const intentions = notes.filter(
     (n) => n.plannedFor === date && n.doneAt === null,
@@ -322,9 +307,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           intentionCount={intentions}
           confirmed={day.confirmed}
           onConfirm={confirmDay}
-          onOpenTemplates={() => setTemplatesOpen(true)}
-          threads={day.threads}
-          onOpenGoals={() => setGoalsOpen(true)}
+          onOpenMenu={() => setMenuOpen(true)}
         />
 
         <div className="mt-5 px-6">
@@ -342,7 +325,6 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             onToggleDone={toggleDone}
             onStart={start}
             onOpenBlock={setEditingId}
-            onOpenThread={setGoalId}
             onFillGap={fillGap}
             onMoveBlock={moveBlock}
             onReorderBlock={reorderBlock}
@@ -363,11 +345,15 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             threads={day.threads}
             nowMin={nowMin}
             onSubmit={handleAdd}
-            onCreateThread={addThreadNamed}
-            onPatchThread={patchThread}
           />
         </div>
       </footer>
+
+      <DayMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenTemplates={() => setTemplatesOpen(true)}
+      />
 
       <TemplateSheet
         open={templatesOpen}
@@ -386,29 +372,8 @@ function DayScreen({ nowMin }: { nowMin: number }) {
         onDelete={deleteBlock}
         onStart={start}
         onCarry={(b) => carryTo(b, addDays(date, 1))}
-        onPatchThread={patchThread}
         onCreateThread={addThreadNamed}
         onRepeat={handleRepeat}
-      />
-
-      <GoalsSheet
-        open={goalsOpen}
-        threads={day.threads}
-        week={week?.totals ?? new Map()}
-        onClose={() => setGoalsOpen(false)}
-        onOpenGoal={(id) => {
-          setGoalsOpen(false);
-          setGoalId(id);
-        }}
-      />
-
-      <GoalSheet
-        thread={goal}
-        spentMin={goalId ? (week?.totals.get(goalId) ?? 0) : 0}
-        days={week?.days ?? []}
-        onClose={() => setGoalId(null)}
-        onPatch={patchThread}
-        onArchive={archiveThread}
       />
     </>
   );

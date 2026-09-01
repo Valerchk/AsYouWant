@@ -11,9 +11,13 @@ import { threadColor } from "@/lib/threads";
    where more happened — which is the honest reading. */
 
 export interface Strand {
+  /** Stable across renders: a goal, or a single block that has no goal. */
+  key: string;
+  /** The goal it belongs to, when it has one. */
   threadId: string | null;
   name: string;
-  colorIndex: number;
+  /** Null when nothing said what colour this should be. */
+  colorIndex: number | null;
   minutes: number;
 }
 
@@ -44,7 +48,7 @@ export function DayCrossSection({ strands }: { strands: Strand[] }) {
       viewBox={`0 0 ${SIZE} ${SIZE}`}
       className="mx-auto block h-auto w-full max-w-[260px]"
       role="img"
-      aria-label="The day, by goal"
+      aria-label="The day, by where it went"
     >
       {/* the core: the day itself, before any goal claims it */}
       <circle cx={CENTRE} cy={CENTRE} r={CORE} fill="var(--color-sunk)" />
@@ -56,15 +60,15 @@ export function DayCrossSection({ strands }: { strands: Strand[] }) {
         const circumference = 2 * Math.PI * r;
         return (
           <motion.circle
-            key={strand.threadId ?? `none-${i}`}
+            key={strand.key}
             cx={CENTRE}
             cy={CENTRE}
             r={r}
             fill="none"
             stroke={
-              strand.threadId
-                ? threadColor(strand.colorIndex)
-                : "var(--color-rule)"
+              strand.colorIndex === null
+                ? "var(--color-rule)"
+                : threadColor(strand.colorIndex)
             }
             strokeWidth={Math.max(1.5, width - 1.5)}
             strokeDasharray={circumference}

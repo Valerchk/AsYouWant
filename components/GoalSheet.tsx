@@ -19,10 +19,12 @@ const TARGETS = [0, 60, 120, 300, 600, 900];
 
 interface Props {
   thread: Thread | null;
-  /** Minutes this goal actually got over the last seven days. */
+  /** Minutes this goal actually got over the span on screen. */
   spentMin: number;
-  /** The same seven days, one at a time, oldest first. */
+  /** That span, one day at a time, oldest first. */
   days: { date: string; byThread: Map<string, number> }[];
+  /** What to call the span in prose: "week", "month". */
+  spanLabel: string;
   onClose: () => void;
   onPatch: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
   onArchive: (id: string) => void;
@@ -40,6 +42,7 @@ function SheetBody({
   thread,
   spentMin,
   days,
+  spanLabel,
   onClose,
   onPatch,
   onArchive,
@@ -47,7 +50,10 @@ function SheetBody({
   const [name, setName] = useState(thread.name);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
 
-  const target = thread.weeklyTargetMin ?? 0;
+  // The promise is per week; the screen may be counting a month. Scaling it
+  // is the only way the bar can mean the same thing at both lengths.
+  const weeks = Math.max(1, days.length) / 7;
+  const target = Math.round((thread.weeklyTargetMin ?? 0) * weeks);
   const colour = threadColor(thread.colorIndex);
   const ratio = target > 0 ? Math.min(1, spentMin / target) : 0;
 
@@ -83,7 +89,7 @@ function SheetBody({
       </div>
 
       <p className="num mt-1 mb-6 text-micro text-faint">
-        {spentMin > 0 ? formatDuration(spentMin) : "nothing"} this week
+        {spentMin > 0 ? formatDuration(spentMin) : "nothing"} this {spanLabel}
         {target > 0 && ` · of ${formatDuration(target)}`}
       </p>
 
@@ -99,9 +105,9 @@ function SheetBody({
         </div>
       )}
 
-      {/* Seven bars, because a single weekly total hides the difference
-          between an hour a day and seven hours on Sunday. */}
-      {days.length > 0 && <WeekBars thread={thread} days={days} />}
+      {/* One bar per day, because a single total hides the difference between
+          an hour a day and seven hours on Sunday. */}
+      {days.length > 0 && <DayBars thread={thread} days={days} />}
 
       <GoalStyle
         thread={thread}
@@ -175,9 +181,9 @@ function SheetBody({
   );
 }
 
-/* Seven bars rather than one number: a weekly total cannot tell an hour a day
+/* One bar per day rather than one number: a total cannot tell an hour a day
    apart from seven hours on Sunday, and those are different weeks. */
-function WeekBars({
+function DayBars({
   thread,
   days,
 }: {
@@ -188,13 +194,17 @@ function WeekBars({
   // Floored at an hour so a single ten-minute day does not draw a full bar.
   const peak = Math.max(60, ...values);
   const colour = threadColor(thread.colorIndex);
+  // A month's worth of dates under a month's worth of bars is a grey smear,
+  // so past a fortnight only the weeks are marked.
+  const label = (date: string, i: number) =>
+    days.length <= 14 || i % 7 === 0 ? Number(date.slice(8)) : "";
 
   return (
     <div className="mb-6">
       <div className="mb-2 text-micro tracking-[0.18em] text-faint uppercase">
-        The last seven days
+        {days.length === 7 ? "This week, day by day" : "Day by day"}
       </div>
-      <div className="flex items-end gap-1.5" style={{ height: 56 }}>
+      <div className="flex items-end gap-[3px]" style={{ height: 56 }}>
         {days.map((day, i) => (
           <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
             <motion.div
@@ -207,7 +217,7 @@ function WeekBars({
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             />
             <span className="num text-micro leading-none text-faint">
-              {Number(day.date.slice(8))}
+              {label(day.date, i)}
             </span>
           </div>
         ))}

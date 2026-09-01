@@ -3,7 +3,8 @@
 import { motion, AnimatePresence } from "motion/react";
 import type { Block } from "@/lib/timeline/engine";
 import { formatDuration } from "@/lib/time";
-import { threadColor, threadById, type Thread } from "@/lib/threads";
+import { threadById, type Thread } from "@/lib/threads";
+import { blockLook, lookColor } from "@/lib/blocks/look";
 import { Icon } from "@/components/icons/Icon";
 import { FADE_SPRING } from "./motion";
 
@@ -44,7 +45,9 @@ export function OverflowTray({
       <ul className="space-y-px">
         <AnimatePresence initial={false}>
           {blocks.map((b) => {
-            const thread = threadById(threads, b.threadId);
+            // Same colour it wore on the ribbon, so a block that got pushed
+            // out is recognisably the one you were looking at.
+            const colour = lookColor(blockLook(b, threadById(threads, b.threadId)));
             return (
               <motion.li
                 key={b.id}
@@ -58,9 +61,7 @@ export function OverflowTray({
                 <span
                   className="h-6 w-[3px] shrink-0"
                   style={{
-                    background: thread
-                      ? threadColor(thread.colorIndex)
-                      : "var(--color-rule)",
+                    background: colour ?? "var(--color-rule)",
                     opacity: 0.6,
                   }}
                 />

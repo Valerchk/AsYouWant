@@ -17,7 +17,7 @@ import type {
   ExportBundle,
   NewBlock,
   NoteStore,
-  WeekSpend,
+  Spend,
 } from "./types";
 
 /* Browser-storage implementation. Used until Supabase is configured, so the
@@ -64,6 +64,8 @@ function materialise(vault: Vault, day: string): boolean {
       actualStartMin: null,
       actualEndMin: null,
       routineId: routine.id,
+      colorIndex: null,
+      icon: null,
     });
     grew = true;
   }
@@ -192,13 +194,13 @@ export function createLocalDayStore(): DayStore {
       saveVault(vault);
     },
 
-    async loadWeek(endDay) {
+    async loadSpend(fromDay, toDay) {
       const vault = read();
       const totals = new Map<string, number>();
-      const days: WeekSpend["days"] = [];
+      const days: Spend["days"] = [];
 
-      for (let i = 6; i >= 0; i -= 1) {
-        const date = addDays(endDay, -i);
+      for (let i = 0; i <= daysBetween(fromDay, toDay); i += 1) {
+        const date = addDays(fromDay, i);
         const byThread = new Map<string, number>();
         for (const b of vault.days[date]?.blocks ?? []) {
           if (!b.threadId || b.status !== "done") continue;

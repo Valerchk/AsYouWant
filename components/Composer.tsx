@@ -12,27 +12,30 @@ import { parseQuickAdd, type ParseToken } from "@/lib/parse/quickAdd";
 import { setDuration, setTime, stripThread } from "@/lib/parse/edit";
 import { formatClock, formatDuration } from "@/lib/time";
 import { threadColor, type Thread } from "@/lib/threads";
+import { blockLook, lookColor, type Look } from "@/lib/blocks/look";
 import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
-import { GoalStyle } from "@/components/GoalStyle";
+import { BlockLook } from "@/components/BlockLook";
 import { SendButton } from "@/components/SendButton";
 
 /* ==========================================================================
    Where everything is made — in one act.
    --------------------------------------------------------------------------
-   A field, the goals laid out under it, and two chips for how long and when.
-   Writing a block and saying what it is for is one continuous gesture: there
-   is no goal to set up first and nothing to attach afterwards.
+   A field and three chips: how long, when, and what it looks like. Writing a
+   block and giving it a colour is one continuous gesture, and nothing has to
+   exist beforehand for it to work.
 
-   That is the whole point of this file. The goals used to be in two other
-   places — a scrolling row in the header that only opened settings, and a
-   chip here that hid them behind a panel — so giving a block a goal read as a
-   third step after inventing the goal and writing the block. Now the goals
-   are simply present, all of them, and one tap is the entire assignment.
+   That last clause is the entire point of this file. Colour and icon used to
+   belong to a goal, so making one block look different from another meant
+   inventing a goal, naming it, dressing it, and attaching it — four acts to
+   answer "make this one green". The look now belongs to the block. Goals are
+   still here, as an optional row at the bottom of the same panel, and they
+   are what a week or a month was for rather than a prerequisite for a
+   Tuesday afternoon; they are made and kept on their own tab.
 
-   The chips are not a second way of doing what the syntax does: they rewrite
-   the same string the parser reads, so "45m" typed and 45m tapped are the
-   same edit and cannot contradict each other.
+   The chips are not a second way of doing what the syntax does: the first two
+   rewrite the same string the parser reads, so "45m" typed and 45m tapped are
+   the same edit and cannot contradict each other.
    ========================================================================== */
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
@@ -52,6 +55,11 @@ const FIELD_BOX = "py-3 pl-3 pr-12";
 
 type Panel = "duration" | "time" | "look";
 
+/** Everything the composer knows about a block that is not in its text. */
+export interface ComposerDraft extends Look {
+  threadId: string | null;
+}
+
 export interface ComposerHandle {
   /** Drop text into the field and put the cursor after it. */
   prefill: (text: string) => void;
@@ -60,19 +68,17 @@ export interface ComposerHandle {
 interface Props {
   threads: Thread[];
   nowMin: number;
-  onSubmit: (input: string, threadId: string | null) => void;
-  onCreateThread: (name: string) => Promise<Thread>;
-  onPatchThread: (id: string, patch: Partial<Omit<Thread, "id">>) => void;
+  onSubmit: (input: string, draft: ComposerDraft) => void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { threads, nowMin, onSubmit, onCreateThread, onPatchThread },
+  { threads, nowMin, onSubmit },
   ref,
 ) {
   const [value, setValue] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [look, setLook] = useState<Look>({ colorIndex: null, icon: null });
   const [panel, setPanel] = useState<Panel | null>(null);
-  const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Exposed imperatively rather than as a prop: tapping an open stretch fills
@@ -94,8 +100,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   const { parsed, tokens } = useMemo(() => parseQuickAdd(value), [value]);
 
-  /* A goal reaches the block one of two ways: picked from the chip, or typed
-     as a #tag. The chip wins when both are present, because tapping it strips
+  /* A goal reaches the block one of two ways: picked from the row, or typed
+     as a #tag. The row wins when both are present, because tapping it strips
      the tag — otherwise the field would show one goal and the block get
      another. */
   const typedThread = useMemo(() => {
@@ -112,6 +118,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     ? (threads.find((t) => t.id === threadId) ?? null)
     : null;
   const thread = chosenThread ?? typedThread;
+
+  // What the block will actually wear, goal included — the same resolution
+  // the ribbon does, so the chip is a true preview and not an approximation.
+  const shown = blockLook(look, thread);
+  const shownColour = lookColor(shown);
 
   const hasDuration = tokens.some((t) => t.type === "duration");
 
@@ -133,31 +144,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setValue((v) => stripThread(v));
   }
 
-  /* Naming a goal and dressing it happen inside the panel that is already
-     open, so a block being written never has to be abandoned to go and set
-     something up first. Two screens for one thought was the complaint. */
-  function createThread() {
-    const name = draft.trim();
-    if (!name) return;
-    setDraft("");
-    onCreateThread(name)
-      .then((made) => {
-        setThreadId(made.id);
-        setValue((v) => stripThread(v));
-      })
-      .catch(() => {
-        // Already on screen: useDay puts the store's error where the day was.
-      });
-  }
-
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!parsed.title) return;
-    onSubmit(value, threadId);
+    onSubmit(value, { threadId, ...look });
     setValue("");
     setThreadId(null);
+    setLook({ colorIndex: null, icon: null });
     setPanel(null);
-    setDraft("");
     inputRef.current?.focus();
   }
 
@@ -255,72 +249,40 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
               {panel === "look" && (
                 <div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {threads.map((t) => (
-                      <Chip
-                        key={t.id}
-                        active={thread?.id === t.id}
-                        onClick={() => pickThread(t.id)}
-                      >
-                        {isGoalIcon(t.icon) ? (
-                          <GoalIcon
-                            name={t.icon}
-                            size={13}
-                            style={{ color: threadColor(t.colorIndex) }}
-                          />
-                        ) : (
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-plate"
-                            style={{ background: threadColor(t.colorIndex) }}
-                          />
-                        )}
-                        {t.name}
-                      </Chip>
-                    ))}
-                  </div>
+                  <BlockLook
+                    look={look}
+                    onChange={(patch) => setLook((l) => ({ ...l, ...patch }))}
+                    inherited={
+                      thread
+                        ? { colorIndex: thread.colorIndex, icon: thread.icon ?? null }
+                        : undefined
+                    }
+                  />
 
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <input
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        // Inside the composer's form: without this, Return
-                        // would send the block instead of naming the goal.
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          createThread();
-                        }
-                      }}
-                      // Three examples rather than a blank prompt: they say
-                      // what size of thing belongs here without a sentence.
-                      placeholder="Work, Study, Health…"
-                      aria-label="Name a new goal"
-                      className="min-w-0 flex-1 rounded-edge bg-sunk px-3 py-2 text-fine text-deep ring-1 ring-rule outline-none focus:ring-accent/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={createThread}
-                      disabled={!draft.trim()}
-                      className="rounded-edge bg-accent px-3 py-2 text-fine text-paper disabled:bg-rule disabled:text-faint"
-                    >
-                      Add
-                    </button>
-                  </div>
-
-                  {/* Colour and icon, in the same panel, for whichever goal is
-                      selected — including one named a second ago. This is the
-                      whole of "pick it and its colour at once". */}
-                  {thread && (
-                    <div className="mt-4 border-t border-grid pt-4">
-                      <GoalStyle
-                        thread={thread}
-                        onPatch={(patch) => onPatchThread(thread.id, patch)}
-                      />
-                    </div>
+                  {/* Optional, and last, and absent entirely until goals
+                      exist. A block is complete without one; this only says
+                      which longer arc today's hour was feeding. */}
+                  {threads.length > 0 && (
+                    <>
+                      <div className="mt-4 mb-2 text-micro tracking-[0.18em] text-faint uppercase">
+                        Part of
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {threads.map((t) => (
+                          <Chip
+                            key={t.id}
+                            active={thread?.id === t.id}
+                            onClick={() => pickThread(t.id)}
+                          >
+                            <ThreadMark thread={t} />
+                            {t.name}
+                          </Chip>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
-
             </div>
           </motion.div>
         )}
@@ -371,82 +333,71 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <SendButton disabled={!parsed.title} label="Add this block" />
       </div>
 
-      {/* Every goal that exists, laid out — one tap attaches it. It wraps
-          rather than scrolling sideways: a row you have to drag to read is a
-          row whose far end nobody ever sees.
-
-          There is no way to make a goal from here, and that is the point. An
-          empty "＋" beside a list of coloured labels is an invitation to type
-          the thing you want to do, and a day planner that answers "Change my
-          address" with a colour swatch has misled you. A goal is only ever
-          born from a block that already exists — see BlockSheet. */}
-      {/* How long, when, and what it is part of.
+      {/* How long, when, and what it looks like.
 
           Animated rather than switched on: the footer is pinned over the day,
           so a row appearing at full height moves everything above it in one
           frame, which reads as the page glitching. */}
       <AnimatePresence initial={false}>
-      {composing && (
-      <motion.div
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: "auto" }}
-        exit={{ opacity: 0, height: 0 }}
-        transition={{ type: "spring", stiffness: 420, damping: 38 }}
-        className="overflow-hidden"
-      >
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <ChipToggle
-          open={panel === "duration"}
-          onClick={() => setPanel(panel === "duration" ? null : "duration")}
-          muted={!hasDuration}
-        >
-          <Icon name="duration" size={13} />
-          {formatDuration(parsed.plannedMin)}
-        </ChipToggle>
+        {composing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 38 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <ChipToggle
+                open={panel === "duration"}
+                onClick={() => setPanel(panel === "duration" ? null : "duration")}
+                muted={!hasDuration}
+              >
+                <Icon name="duration" size={13} />
+                {formatDuration(parsed.plannedMin)}
+              </ChipToggle>
 
-        <ChipToggle
-          open={panel === "time"}
-          onClick={() => setPanel(panel === "time" ? null : "time")}
-          muted={parsed.startMin === null}
-        >
-          <Icon name={parsed.startMin === null ? "flow" : "anchor"} size={13} />
-          {/* The answer to "when", not the name of a mechanism. Nobody should
-              have to be told what "anchored" means to plan an afternoon. */}
-          {parsed.startMin === null
-            ? "Anytime"
-            : `At ${formatClock(parsed.startMin)}`}
-        </ChipToggle>
+              <ChipToggle
+                open={panel === "time"}
+                onClick={() => setPanel(panel === "time" ? null : "time")}
+                muted={parsed.startMin === null}
+              >
+                <Icon
+                  name={parsed.startMin === null ? "flow" : "anchor"}
+                  size={13}
+                />
+                {/* The answer to "when", not the name of a mechanism. Nobody
+                    should have to be told what "anchored" means to plan an
+                    afternoon. */}
+                {parsed.startMin === null
+                  ? "Anytime"
+                  : `At ${formatClock(parsed.startMin)}`}
+              </ChipToggle>
 
-        <ChipToggle
-          open={panel === "look"}
-          onClick={() => setPanel(panel === "look" ? null : "look")}
-          muted={!thread && !parsed.threadName}
-        >
-          {thread ? (
-            isGoalIcon(thread.icon) ? (
-              <GoalIcon
-                name={thread.icon}
-                size={13}
-                style={{ color: threadColor(thread.colorIndex) }}
-              />
-            ) : (
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-plate"
-                style={{ background: threadColor(thread.colorIndex) }}
-              />
-            )
-          ) : (
-            <Icon name="thread" size={13} />
-          )}
-          {thread
-            ? thread.name
-            : parsed.threadName
-              ? `${parsed.threadName} · new`
-              : "Goal"}
-        </ChipToggle>
-      </div>
-      </motion.div>
-      )}
+              <ChipToggle
+                open={panel === "look"}
+                onClick={() => setPanel(panel === "look" ? null : "look")}
+                muted={shown.colorIndex === null && shown.icon === null}
+              >
+                {isGoalIcon(shown.icon) ? (
+                  <GoalIcon
+                    name={shown.icon}
+                    size={13}
+                    style={{ color: shownColour ?? "currentColor" }}
+                  />
+                ) : shownColour ? (
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-plate"
+                    style={{ background: shownColour }}
+                  />
+                ) : (
+                  <Icon name="swatch" size={13} />
+                )}
+                {thread ? thread.name : "Look"}
+              </ChipToggle>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </form>
   );
@@ -454,6 +405,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
 /* -------------------------------------------------------------------------- */
 
+function ThreadMark({ thread }: { thread: Thread }) {
+  const colour = threadColor(thread.colorIndex);
+  return isGoalIcon(thread.icon) ? (
+    <GoalIcon name={thread.icon} size={13} style={{ color: colour }} />
+  ) : (
+    <span
+      className="inline-block h-2.5 w-2.5 rounded-plate"
+      style={{ background: colour }}
+    />
+  );
+}
 
 function Chip({
   active,

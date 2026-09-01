@@ -31,6 +31,9 @@ function toTemplateBlocks(blocks: Block[]): TemplateBlock[] {
       startMin: b.startMin,
       plannedMin: b.plannedMin,
       threadId: b.threadId,
+      // A saved day should come back looking like the day it was saved from.
+      colorIndex: b.colorIndex ?? null,
+      icon: b.icon ?? null,
     }));
 }
 
@@ -44,6 +47,8 @@ function toNewBlocks(template: DayTemplate): NewBlock[] {
     threadId: t.threadId,
     actualStartMin: null,
     actualEndMin: null,
+    colorIndex: t.colorIndex ?? null,
+    icon: t.icon ?? null,
   }));
 }
 

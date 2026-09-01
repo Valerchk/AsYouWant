@@ -70,6 +70,10 @@ type BlockRow = {
   updated_at: string;
   /** The routine this block grew from (migration 0004). */
   routine_id: string | null;
+  /** The block's own colour, 0–15. NULL borrows its goal's (migration 0006). */
+  color_index: number | null;
+  /** The block's own icon. NULL borrows its goal's (migration 0006). */
+  icon: string | null;
 }
 
 type RoutineRow = {
@@ -148,7 +152,7 @@ export interface Database {
         BlockRow,
         "id" | "status" | "sort_order" | "created_at" | "updated_at" |
         "thread_id" | "actual_start_min" | "actual_end_min" | "carried_from" |
-        "routine_id"
+        "routine_id" | "color_index" | "icon"
       >;
       routines: Table<RoutineRow, "id" | "created_at" | "kind" | "thread_id">;
       day_templates: Table<DayTemplateRow, "id" | "created_at">;
