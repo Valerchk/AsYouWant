@@ -74,12 +74,15 @@ export const viewport: Viewport = {
   // by accident mid-drag.
   maximumScale: 1,
   userScalable: false,
-  // Let the on-screen keyboard shrink the layout viewport where the browser
-  // supports it, so a bar pinned to the bottom lands above the keyboard on
-  // its own. lib/useViewportShift covers the rest: it measures zero precisely
-  // when this works, and it is what puts the bars back when a browser shrinks
-  // the layout viewport and then forgets to restore it.
-  interactiveWidget: "resizes-content",
+  /* Deliberately no `interactiveWidget`. Asking the browser to resize the
+     layout viewport for the on-screen keyboard sounds like the tidy answer
+     and is not: iOS shrinks that viewport, restores it imprecisely, and every
+     `position: fixed` bottom bar is then anchored to an edge that is no
+     longer where the screen ends. That is the whole of the bug where the
+     composer and the tab bar hung over a band of dead screen after typing —
+     and correcting it in JavaScript only stacked a second displacement on
+     the system's own and pushed them off the screen. Left alone, iOS lifts
+     fixed bars over the keyboard by itself, correctly. */
 };
 
 export default function RootLayout({

@@ -125,18 +125,20 @@ textarea {
    the thumb only ever learns one place. One shared height keeps them from
    drifting apart.
 
-   `--dock` is written by lib/useViewportShift: a signed distance between the
-   bottom edge the browser lays out against and the bottom edge you can
-   actually see. Negative lifts the bars over a keyboard; positive brings them
-   back down when the layout viewport is left short — which is how they ended
-   up hanging above a band of dead screen after a keyboard had closed.
+   Both are plain fixed elements, and there is deliberately no JavaScript
+   moving them. iOS already re-anchors fixed elements above the on-screen
+   keyboard, and it does that well; the two attempts to help it — a measured
+   offset on `bottom`, then a measured transform — were what broke it. Each
+   was a second correction stacked on the system's own, and two corrections
+   for one displacement put the composer off the screen entirely.
 
-   It is a transform rather than an offset on `bottom` deliberately: `bottom`
-   is measured against the very viewport that goes wrong, so correcting it
-   there is asking the broken ruler to measure itself. */
+   The `interactive-widget` viewport key was the root of it: asking iOS to
+   shrink the layout viewport for the keyboard makes `bottom` resolve against
+   a rectangle that the system then restores imprecisely, which is the band of
+   dead screen the bars were left hanging over. Without it the layout viewport
+   never moves, so there is nothing to restore and nothing to correct. */
 :root {
   --tabbar-h: 57px;
-  --dock: 0px;
 }
 
 .above-tabs {
@@ -145,7 +147,6 @@ textarea {
   bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-h));
   left: 0;
   z-index: 20;
-  transform: translateY(var(--dock));
 }
 
 .tabbar {
@@ -154,7 +155,6 @@ textarea {
   bottom: 0;
   left: 0;
   z-index: 30;
-  transform: translateY(var(--dock));
 }
 
 /* The space the fixed tab bar would have taken if it were in the flow. */

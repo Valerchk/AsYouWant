@@ -15,9 +15,9 @@ import { useNotes } from "@/lib/data/useNotes";
    tab holds only the long view — what a week or a month was actually for. It
    is somewhere you go on Sunday, not somewhere you have to go before Tuesday.
 
-   Fixed rather than sticky, and moved by the same --dock the composer uses,
-   so the two bars are one object as far as the keyboard is concerned. As a
-   sticky element over a fixed footer they could and did come apart. */
+   Fixed rather than sticky, the same as the composer above it, so the two
+   bars are one object as far as the keyboard is concerned. As a sticky
+   element over a fixed footer they could and did come apart. */
 
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/today", label: "Today", icon: "flow" },

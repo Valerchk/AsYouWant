@@ -1,23 +1,18 @@
-"use client";
-
 import { TabBar } from "@/components/TabBar";
-import { useViewportShift } from "@/lib/useViewportShift";
 
 /* The tabbed shell. Login, the auth callback and the design bench sit outside
    this group, so they get no tab bar.
 
-   A client component only because of the hook: where the bottom of the screen
-   actually is gets written once, here, to a CSS variable that both bottom
-   bars read. Measuring it in each screen instead would mean two observers
-   disagreeing about it, which is the shape the bug took. */
+   No keyboard handling here, and that is the fix rather than an omission. The
+   composer and the tab bar are both plain fixed elements; iOS raises them over
+   its own keyboard, and two successive attempts to measure and correct that
+   from JavaScript each made it worse — see the note in globals.css. */
 
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  useViewportShift();
-
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="flex-1">{children}</div>
