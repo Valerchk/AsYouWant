@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { createClient } from "@/lib/supabase/client";
+import { readSignInInput, type OtpType } from "@/lib/auth/signInInput";
 import { Icon } from "@/components/icons/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -22,30 +23,48 @@ import { ThemeToggle } from "@/components/ThemeToggle";
        out of your own account with nothing on screen explaining why
 
    No amount of care with the link fixes that; the handoff between containers
-   is the problem. A code does not have to be handed anywhere. You read six
-   digits out of your mail and type them into the app you are already standing
-   in, and the app you sign into is the one you were using.
+   is the problem. What can cross is the token inside the link. Supabase's mail
+   points at `/auth/v1/verify?token=<hash>`, and that hash redeems directly
+   with `verifyOtp({ token_hash })` — no verifier, no cookie, nothing that had
+   to be there first. So the link is not tapped, it is copied, and the app
+   finishes the sign-in in its own container.
 
-   The link still works, and still makes sense on a laptop where the mail and
-   the browser are the same session. It is simply no longer the only door.
+   Six digits would be nicer than copying a link, and this field takes those
+   too — but putting them in the mail needs custom SMTP on Supabase, and the
+   app must not be unusable until its owner has arranged a mail provider.
+
+   The link still works by tapping on a laptop, where the mail and the browser
+   are the same session. It is simply no longer the only door.
    ========================================================================== */
 
 type Stage = "email" | "sending" | "code" | "verifying";
 
 const ERRORS: Record<string, string> = {
-  expired: "That link has expired, or it opened in a different browser than the one you asked from. Send a fresh code and type it in here.",
-  missing_code: "That link arrived incomplete. Send a fresh code and type it in here.",
+  expired:
+    "That link opened in a different browser from the one that asked for it — which is what happens when an app lives on the Home Screen. Send a fresh one, then copy the link instead of tapping it.",
+  missing_code:
+    "That link arrived incomplete. Send a fresh one, then copy the link instead of tapping it.",
 };
 
 /** Long enough that Supabase's own limiter is never the thing you meet. */
 const RESEND_SECONDS = 60;
 
-const CODE_LENGTH = 6;
-
 /** Supabase says how long to wait; use its number rather than guessing. */
 function waitFrom(message: string): number | null {
   const m = /after (\d+) seconds?/i.exec(message);
   return m ? Number(m[1]) : null;
+}
+
+/** One numbered line of the two-step instruction. */
+function Step({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="num mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-plate bg-sunk text-micro text-faint ring-1 ring-rule">
+        {n}
+      </span>
+      <span className="text-fine leading-5 text-ink">{children}</span>
+    </li>
+  );
 }
 
 function LoginForm() {
@@ -59,6 +78,7 @@ function LoginForm() {
       : "/today";
 
   const [email, setEmail] = useState("");
+  /** Whatever came out of the mail: a pasted link, or a typed code. */
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<Stage>("email");
   const [message, setMessage] = useState(ERRORS[params.get("error") ?? ""] ?? "");
@@ -110,8 +130,20 @@ function LoginForm() {
 
   async function verify(e: React.FormEvent) {
     e.preventDefault();
-    const token = code.replace(/\D/g, "");
-    if (token.length !== CODE_LENGTH) return;
+    const parsed = readSignInInput(code);
+
+    if (parsed.kind === "spent") {
+      setMessage(
+        "That link has already been opened, so its token is used up. In the mail, hold the link and choose Copy rather than tapping it — then paste it here.",
+      );
+      return;
+    }
+    if (parsed.kind === "unknown") {
+      setMessage(
+        "That is neither a sign-in link nor a six-digit code. Copy the whole link out of the mail and paste it here.",
+      );
+      return;
+    }
 
     setStage("verifying");
     setMessage("");
@@ -119,41 +151,62 @@ function LoginForm() {
     const supabase = createClient();
     const address = email.trim();
 
-    /* Two types, because Supabase sends two different mails. An address it
-       already knows gets a magic-link code, which verifies as "email"; an
-       address signing up for the first time gets a confirmation code, which
-       verifies as "signup". Nothing on this screen can tell which you are, and
-       guessing wrong reads to the person as a code that simply does not work. */
-    let { error } = await supabase.auth.verifyOtp({
-      email: address,
-      token,
-      type: "email",
-    });
-    if (error) {
-      const retry = await supabase.auth.verifyOtp({
-        email: address,
-        token,
-        type: "signup",
-      });
-      if (!retry.error) error = null;
+    /* A hash carries its own type; a typed code does not, and Supabase sends
+       two different mails. An address it already knows gets a magic-link code,
+       which verifies as "email"; an address signing up for the first time gets
+       a confirmation code, which verifies as "signup". Nothing on this screen
+       can tell which you are, and guessing wrong reads to the person as a code
+       that simply does not work — so try both. */
+    const attempts: OtpType[] =
+      parsed.kind === "hash" ? [parsed.type, "signup", "email"] : ["email", "signup"];
+
+    let failure: string | null = null;
+    for (const type of attempts) {
+      const { error } =
+        parsed.kind === "hash"
+          ? await supabase.auth.verifyOtp({ token_hash: parsed.tokenHash, type })
+          : await supabase.auth.verifyOtp({
+              email: address,
+              token: parsed.token,
+              type: type as "email" | "signup",
+            });
+
+      if (!error) {
+        // A full navigation rather than a client route change: the session
+        // lives in cookies, and the proxy must see them before it decides.
+        window.location.assign(next);
+        return;
+      }
+      failure = error.message;
+      // A token that is genuinely spent or expired will not become valid under
+      // a different name, so stop rather than burning the rate limit.
+      if (/expired|already|used/i.test(error.message)) break;
     }
 
-    if (error) {
-      setStage("code");
-      setMessage(
-        error.status === 403 || /expired|invalid/i.test(error.message)
-          ? "That code did not match, or it has expired. Check the newest mail, or send a fresh one."
-          : error.message,
-      );
-      return;
-    }
-
-    // A full navigation rather than a client route change: the session lives
-    // in cookies, and the proxy has to see them before it decides anything.
-    window.location.assign(next);
+    setStage("code");
+    setMessage(
+      failure && !/invalid/i.test(failure)
+        ? failure
+        : "That link or code did not work — they expire quickly and can only be used once. Send a fresh one.",
+    );
   }
 
-  const digits = code.replace(/\D/g, "");
+  /** Reads the clipboard on a tap, which is the gesture iOS requires. */
+  async function pasteIn() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) {
+        setCode(text.trim());
+        setMessage("");
+        return;
+      }
+      setMessage("The clipboard is empty. Copy the link from the mail first.");
+    } catch {
+      setMessage("Could not read the clipboard. Paste into the field instead.");
+    }
+  }
+
+  const ready = readSignInInput(code).kind !== "unknown";
 
   return (
     <AnimatePresence mode="wait">
@@ -172,32 +225,52 @@ function LoginForm() {
           </div>
           <h1 className="display text-title text-deep">Check your mail</h1>
           <p className="mt-3 text-base leading-7 text-ink">
-            A six-digit code is on its way to{" "}
+            A sign-in link is on its way to{" "}
             <span className="num text-deep">{email}</span>.
           </p>
 
+          {/* Three lines, because the one instruction that matters is
+              counter-intuitive: do not tap the thing that looks tappable.
+              Tapping opens Safari, and Safari is not this app. */}
+          <ol className="mt-6 space-y-2.5">
+            <Step n={1}>
+              In the mail, <b className="text-deep">hold</b> the link and choose{" "}
+              <b className="text-deep">Copy</b> — do not tap it.
+            </Step>
+            <Step n={2}>Come back here and paste it below.</Step>
+          </ol>
+
           <label
             htmlFor="code"
-            className="mt-8 mb-2 block text-micro tracking-[0.18em] text-faint uppercase"
+            className="mt-7 mb-2 block text-micro tracking-[0.18em] text-faint uppercase"
           >
-            The code
+            The link
           </label>
-          <input
-            id="code"
-            ref={codeRef}
-            // `one-time-code` is what makes iOS offer the digits above the
-            // keyboard the moment the mail arrives — no switching apps at all.
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={CODE_LENGTH}
-            enterKeyHint="go"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            placeholder="000000"
-            aria-label="Six-digit sign-in code"
-            className="num w-full rounded-edge bg-sunk px-3.5 py-3.5 text-center text-title tracking-[0.4em] text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/40 focus:shadow-lift focus:ring-accent/40"
-          />
+          <div className="flex gap-2">
+            <input
+              id="code"
+              ref={codeRef}
+              // `one-time-code` costs nothing here and lights up the keyboard
+              // strip the day the mail carries six digits instead.
+              autoComplete="one-time-code"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Paste the link, or a 6-digit code"
+              aria-label="The sign-in link from your mail, or a six-digit code"
+              className="num min-w-0 flex-1 truncate rounded-edge bg-sunk px-3.5 py-3.5 text-fine text-deep ring-1 ring-rule outline-none transition-shadow placeholder:text-faint/50 focus:shadow-lift focus:ring-accent/40"
+            />
+            <button
+              type="button"
+              onClick={() => void pasteIn()}
+              className="shrink-0 rounded-edge px-3.5 text-fine text-ink ring-1 ring-rule transition-colors hover:bg-sunk"
+            >
+              Paste
+            </button>
+          </div>
 
           {message && (
             <p className="mt-3 text-fine leading-6 text-over" role="alert">
@@ -207,7 +280,7 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={stage === "verifying" || digits.length !== CODE_LENGTH}
+            disabled={stage === "verifying" || !ready}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-edge bg-accent py-3.5 text-base text-paper transition-shadow hover:shadow-lift disabled:opacity-40 disabled:shadow-none"
           >
             {stage === "verifying" ? "Signing in…" : "Sign in"}
@@ -237,9 +310,10 @@ function LoginForm() {
           </div>
 
           <p className="mt-7 text-micro leading-5 text-faint">
-            The same mail carries a link. Typing the code is the reliable way
-            when the app is on your Home Screen — a tapped link opens in Safari,
-            which signs in Safari rather than the app you are holding.
+            On a computer you can simply tap the link. On a phone, an app kept
+            on the Home Screen is a separate browser from Safari, so a tapped
+            link signs in Safari instead of here — pasting it signs in the app
+            you are actually holding.
           </p>
         </motion.form>
       ) : (
@@ -259,8 +333,8 @@ function LoginForm() {
             Sign in
           </h1>
           <p className="mt-3 text-base leading-7 text-ink">
-            No password to forget. We mail you a six-digit code, you type it
-            here, you&rsquo;re in.
+            No password to forget. We mail you a sign-in link, you bring it
+            back here, you&rsquo;re in.
           </p>
 
           <label
@@ -299,7 +373,7 @@ function LoginForm() {
               ? "Sending…"
               : cooldown > 0
                 ? `Wait ${cooldown}s`
-                : "Send the code"}
+                : "Send the link"}
             {stage !== "sending" && cooldown === 0 && (
               <Icon name="chevron" size={15} />
             )}
