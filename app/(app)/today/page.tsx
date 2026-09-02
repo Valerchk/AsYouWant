@@ -13,6 +13,7 @@ import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
 import { TemplateSheet } from "@/components/TemplateSheet";
 import { LoadFailure } from "@/components/LoadFailure";
+import { Notice } from "@/components/Notice";
 import { DaySkeleton } from "@/components/Skeleton";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
@@ -55,6 +56,8 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     routines,
     loading,
     error,
+    problem,
+    clearProblem,
     addBlock,
     addBlockWithThread,
     addBlocks,
@@ -340,6 +343,9 @@ function DayScreen({ nowMin }: { nowMin: number }) {
         className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm"
       >
         <div className="mx-auto max-w-2xl px-6 py-3.5">
+          {/* Inside the footer, so the page's bottom padding — which is
+              measured from this element — makes room for it by itself. */}
+          <Notice message={problem} onDismiss={clearProblem} />
           <Composer
             ref={composer}
             threads={day.threads}

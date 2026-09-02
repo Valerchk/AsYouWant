@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { authed, authedClient } from "@/lib/supabase/session";
 import { toBlock, toRoutine, toThread } from "@/lib/blocks/mapper";
 import { addDays, dateInZone, daysBetween } from "@/lib/time";
 import { repeatsOnDay, type RoutineInput } from "@/lib/routines";
@@ -27,16 +27,6 @@ type BlockInsert = Database["public"]["Tables"]["blocks"]["Insert"];
 
 /** Two tabs opening the same day both try to grow the same routine. */
 const UNIQUE_VIOLATION = "23505";
-
-async function requireUser() {
-  const supabase = createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) throw new Error("Not signed in.");
-  return { supabase, userId: user.id };
-}
 
 /** Domain block → database columns. Only the fields a client may set. */
 function toRow(
@@ -74,7 +64,6 @@ function spentOn(row: {
 }
 
 export function createRemoteDayStore(): DayStore {
-  let userId = "";
   let timezone = "UTC";
 
   /** Today where the person is, not where the server is. */
@@ -83,8 +72,7 @@ export function createRemoteDayStore(): DayStore {
   return {
     async load(day: string, nowMin: number): Promise<DayData> {
       void nowMin;
-      const { supabase, userId: uid } = await requireUser();
-      userId = uid;
+      const { supabase, userId: uid } = await authed();
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -184,7 +172,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async addBlock(block: NewBlock, day: string): Promise<Block> {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       // Counted per day rather than kept in a variable: the app can now be
       // adding to tomorrow while today is on screen.
       const { count } = await supabase
@@ -204,7 +192,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async patchBlock(id, patch) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       // Only the columns a patch can legitimately touch, typed against the
       // table so a rename in the schema breaks the build rather than the app.
       const row: BlockUpdate = {};
@@ -230,7 +218,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async reorderFlow(ids) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const results = await Promise.all(
         ids.map((id, i) =>
           supabase.from("blocks").update({ sort_order: i + 1 }).eq("id", id),
@@ -241,7 +229,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async confirmDay(day) {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const { error } = await supabase
         .from("profiles")
         .update({ day_confirmed_on: day })
@@ -250,7 +238,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async addThread(name) {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       // Walk the palette so consecutive goals never share a colour.
       const { count } = await supabase
         .from("threads")
@@ -273,7 +261,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async patchThread(id, patch) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const row: {
         name?: string;
         color_index?: number;
@@ -292,13 +280,13 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async deleteBlock(id) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase.from("blocks").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
 
     async archiveThread(id) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       // Archived rather than deleted: blocks reference it, and a finished day
       // should keep saying which goal it fed.
       const { error } = await supabase
@@ -309,7 +297,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async loadSpend(fromDay, toDay): Promise<Spend> {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const endDay = toDay;
 
       const { data, error } = await supabase
@@ -344,7 +332,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async loadCounts(fromDay, toDay) {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const { data, error } = await supabase
         .from("blocks")
         .select("day, status")
@@ -363,7 +351,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async listRoutines() {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const { data, error } = await supabase
         .from("routines")
         .select("*")
@@ -373,7 +361,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async saveRoutine(input: RoutineInput, id?: string) {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const row = {
         user_id: userId,
         title: input.title,
@@ -394,7 +382,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async deleteRoutine(id) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       // The blocks it already grew keep their days; the foreign key is
       // ON DELETE SET NULL, so they simply stop belonging to a routine.
       const { error } = await supabase.from("routines").delete().eq("id", id);
@@ -402,7 +390,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async listTemplates(): Promise<DayTemplate[]> {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       const { data, error } = await supabase
         .from("day_templates")
         .select("*")
@@ -420,7 +408,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async saveTemplate(name, blocks): Promise<DayTemplate> {
-      const supabase = createClient();
+      const { supabase, userId } = await authed();
       // (user_id, name) is unique in the schema, so saving the same name
       // twice updates rather than failing.
       const { data, error } = await supabase
@@ -437,7 +425,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async deleteTemplate(id) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase
         .from("day_templates")
         .delete()
@@ -446,7 +434,7 @@ export function createRemoteDayStore(): DayStore {
     },
 
     async exportAll(): Promise<ExportBundle> {
-      const { supabase, userId: uid } = await requireUser();
+      const { supabase, userId: uid } = await authed();
 
       const [blocks, threads, routines, templates, notes] = await Promise.all([
         supabase.from("blocks").select("*").eq("user_id", uid).order("day"),
@@ -492,7 +480,7 @@ export function createRemoteDayStore(): DayStore {
 export function createRemoteNoteStore(): NoteStore {
   return {
     async load(): Promise<NoteData[]> {
-      const { supabase, userId } = await requireUser();
+      const { supabase, userId } = await authed();
       const { data, error } = await supabase
         .from("notes")
         .select("*")
@@ -510,7 +498,7 @@ export function createRemoteNoteStore(): NoteStore {
     },
 
     async add(text: string, plannedFor: string | null): Promise<NoteData> {
-      const { supabase, userId } = await requireUser();
+      const { supabase, userId } = await authed();
       const { data, error } = await supabase
         .from("notes")
         .insert({ user_id: userId, text: text.trim(), planned_for: plannedFor })
@@ -528,13 +516,13 @@ export function createRemoteNoteStore(): NoteStore {
     },
 
     async remove(id: string) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase.from("notes").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
 
     async setPlannedFor(id: string, day: string | null) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase
         .from("notes")
         .update({ planned_for: day })
@@ -543,7 +531,7 @@ export function createRemoteNoteStore(): NoteStore {
     },
 
     async setText(id: string, text: string) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase
         .from("notes")
         .update({ text: text.trim() })
@@ -552,7 +540,7 @@ export function createRemoteNoteStore(): NoteStore {
     },
 
     async setDone(id: string, done: boolean) {
-      const supabase = createClient();
+      const supabase = await authedClient();
       const { error } = await supabase
         .from("notes")
         .update({ done_at: done ? new Date().toISOString() : null })

@@ -14,7 +14,11 @@ function announce() {
 export interface UseNotes {
   notes: NoteData[];
   loading: boolean;
+  /** The inbox could not be read at all. */
   error: string | null;
+  /** A write failed; the list on screen is still good. See useDay. */
+  problem: string | null;
+  clearProblem: () => void;
   add: (text: string, plannedFor: string | null) => void;
   remove: (id: string) => void;
   setPlannedFor: (id: string, day: string | null) => void;
@@ -25,6 +29,13 @@ export interface UseNotes {
 export function useNotes(): UseNotes {
   const [notes, setNotes] = useState<NoteData[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const warn = useCallback((e: unknown) => {
+    setProblem(e instanceof Error ? e.message : String(e));
+  }, []);
+
+  const clearProblem = useCallback(() => setProblem(null), []);
 
   useEffect(() => {
     let alive = true;
@@ -48,20 +59,16 @@ export function useNotes(): UseNotes {
         setNotes((n) => [note, ...(n ?? [])]);
         announce();
       })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, []);
+      .catch(warn);
+  }, [warn]);
 
   const remove = useCallback((id: string) => {
     setNotes((n) => (n ?? []).filter((x) => x.id !== id));
     announce();
     noteStore()
       .remove(id)
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, []);
+      .catch(warn);
+  }, [warn]);
 
   const setPlannedFor = useCallback((id: string, day: string | null) => {
     setNotes((n) =>
@@ -70,19 +77,15 @@ export function useNotes(): UseNotes {
     announce();
     noteStore()
       .setPlannedFor(id, day)
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, []);
+      .catch(warn);
+  }, [warn]);
 
   const setText = useCallback((id: string, text: string) => {
     setNotes((n) => (n ?? []).map((x) => (x.id === id ? { ...x, text } : x)));
     noteStore()
       .setText(id, text)
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, []);
+      .catch(warn);
+  }, [warn]);
 
   const setDone = useCallback((id: string, done: boolean) => {
     setNotes((n) =>
@@ -93,15 +96,15 @@ export function useNotes(): UseNotes {
     announce();
     noteStore()
       .setDone(id, done)
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-      });
-  }, []);
+      .catch(warn);
+  }, [warn]);
 
   return {
     notes: notes ?? [],
     loading: notes === null && error === null,
     error,
+    problem,
+    clearProblem,
     add,
     remove,
     setPlannedFor,

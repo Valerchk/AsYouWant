@@ -21,7 +21,18 @@ export interface UseDay {
   day: DayData | null;
   routines: Routine[];
   loading: boolean;
+  /** The day could not be read at all; there is nothing to show. */
   error: string | null;
+  /**
+   * A write failed while the day itself is perfectly fine.
+   *
+   * Kept apart from `error` deliberately. Both used to be the same field, so
+   * one rejected insert replaced the whole screen with a failure page — which
+   * read as the app crashing and the account being signed out, when in truth
+   * the day was still there and one block had not been saved.
+   */
+  problem: string | null;
+  clearProblem: () => void;
   addBlock: (block: NewBlock) => void;
   /** Lay a whole template down in one go. */
   addBlocks: (blocks: NewBlock[]) => void;
@@ -54,10 +65,19 @@ export function useDay(date: string, nowMin: number): UseDay {
   const [day, setDay] = useState<DayData | null>(null);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
 
+  /** The day would not load. Nothing can be shown. */
   const fail = useCallback((e: unknown) => {
     setError(e instanceof Error ? e.message : String(e));
   }, []);
+
+  /** One write did not land. The day on screen stays exactly as it is. */
+  const warn = useCallback((e: unknown) => {
+    setProblem(e instanceof Error ? e.message : String(e));
+  }, []);
+
+  const clearProblem = useCallback(() => setProblem(null), []);
 
   /* Clearing the day the moment the date changes, during render rather than
      in an effect. An effect would paint one frame of Wednesday under
@@ -106,9 +126,9 @@ export function useDay(date: string, nowMin: number): UseDay {
         .then((created) => {
           setDay((d) => (d ? { ...d, blocks: [...d.blocks, created] } : d));
         })
-        .catch(fail);
+        .catch(warn);
     },
-    [date, fail],
+    [date, warn],
   );
 
   const addBlocks = useCallback(
@@ -125,9 +145,9 @@ export function useDay(date: string, nowMin: number): UseDay {
         .then((created) => {
           setDay((d) => (d ? { ...d, blocks: [...d.blocks, ...created] } : d));
         })
-        .catch(fail);
+        .catch(warn);
     },
-    [date, fail],
+    [date, warn],
   );
 
   const patchBlock = useCallback(
@@ -142,9 +162,9 @@ export function useDay(date: string, nowMin: number): UseDay {
             }
           : d,
       );
-      dayStore().patchBlock(id, patch).catch(fail);
+      dayStore().patchBlock(id, patch).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const reorderFlow = useCallback(
@@ -160,9 +180,9 @@ export function useDay(date: string, nowMin: number): UseDay {
             }
           : d,
       );
-      dayStore().reorderFlow(ids).catch(fail);
+      dayStore().reorderFlow(ids).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const carryTo = useCallback(
@@ -184,9 +204,9 @@ export function useDay(date: string, nowMin: number): UseDay {
           );
           return dayStore().patchBlock(block.id, { status: "carried" });
         })
-        .catch(fail);
+        .catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const deleteBlock = useCallback(
@@ -194,9 +214,9 @@ export function useDay(date: string, nowMin: number): UseDay {
       setDay((d) =>
         d ? { ...d, blocks: d.blocks.filter((b) => b.id !== id) } : d,
       );
-      dayStore().deleteBlock(id).catch(fail);
+      dayStore().deleteBlock(id).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const patchThread = useCallback(
@@ -211,9 +231,9 @@ export function useDay(date: string, nowMin: number): UseDay {
             }
           : d,
       );
-      dayStore().patchThread(id, patch).catch(fail);
+      dayStore().patchThread(id, patch).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const archiveThread = useCallback(
@@ -230,9 +250,9 @@ export function useDay(date: string, nowMin: number): UseDay {
             }
           : d,
       );
-      dayStore().archiveThread(id).catch(fail);
+      dayStore().archiveThread(id).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   const addThreadNamed = useCallback(
@@ -244,18 +264,18 @@ export function useDay(date: string, nowMin: number): UseDay {
           return thread;
         })
         .catch((e: unknown) => {
-          fail(e);
+          warn(e);
           // Rethrown so nothing downstream selects a goal that was never made.
           throw e;
         });
     },
-    [fail],
+    [warn],
   );
 
   const confirmDay = useCallback(() => {
     setDay((d) => (d ? { ...d, confirmed: true } : d));
-    dayStore().confirmDay(date).catch(fail);
-  }, [date, fail]);
+    dayStore().confirmDay(date).catch(warn);
+  }, [date, warn]);
 
   const addBlockWithThread = useCallback(
     (block: NewBlock, threadName: string | null) => {
@@ -284,9 +304,9 @@ export function useDay(date: string, nowMin: number): UseDay {
         .then((created) => {
           setDay((d) => (d ? { ...d, blocks: [...d.blocks, created] } : d));
         })
-        .catch(fail);
+        .catch(warn);
     },
-    [day?.threads, addBlock, date, fail],
+    [day?.threads, addBlock, date, warn],
   );
 
   const saveRoutine = useCallback(
@@ -302,11 +322,11 @@ export function useDay(date: string, nowMin: number): UseDay {
           return routine;
         })
         .catch((e: unknown) => {
-          fail(e);
+          warn(e);
           throw e;
         });
     },
-    [fail],
+    [warn],
   );
 
   const deleteRoutine = useCallback(
@@ -322,9 +342,9 @@ export function useDay(date: string, nowMin: number): UseDay {
             }
           : d,
       );
-      dayStore().deleteRoutine(id).catch(fail);
+      dayStore().deleteRoutine(id).catch(warn);
     },
-    [fail],
+    [warn],
   );
 
   return {
@@ -332,6 +352,8 @@ export function useDay(date: string, nowMin: number): UseDay {
     routines,
     loading: day === null && error === null,
     error,
+    problem,
+    clearProblem,
     addBlock,
     addBlocks,
     patchBlock,

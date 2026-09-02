@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons/Icon";
 import { SendButton } from "@/components/SendButton";
 import { LoadFailure } from "@/components/LoadFailure";
 import { ListSkeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Notice";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd, DEFAULT_DURATION_MIN } from "@/lib/parse/quickAdd";
 import { formatClock, formatDuration, localDay } from "@/lib/time";
@@ -47,8 +48,18 @@ function ordered(notes: NoteData[]): NoteData[] {
 function InboxScreen({ nowMin }: { nowMin: number }) {
   const router = useRouter();
   const today = localDay();
-  const { notes, loading, error, add, remove, setPlannedFor, setText, setDone } =
-    useNotes();
+  const {
+    notes,
+    loading,
+    error,
+    problem,
+    clearProblem,
+    add,
+    remove,
+    setPlannedFor,
+    setText,
+    setDone,
+  } = useNotes();
   const { addBlock } = useDay(today, nowMin);
 
   const [draft, setDraft] = useState("");
@@ -211,7 +222,10 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
         ref={footerRef}
         className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm"
       >
-        <form onSubmit={capture} className="mx-auto max-w-2xl px-6 py-3.5">
+        <div className="mx-auto max-w-2xl px-6 pt-3.5">
+          <Notice message={problem} onDismiss={clearProblem} />
+        </div>
+        <form onSubmit={capture} className="mx-auto max-w-2xl px-6 pb-3.5">
           {/* A textarea, not a single line. A thought caught in a hurry is
               rarely one clause, and a field that scrolls sideways past the
               first ten words is a field people stop using. Return makes a new
