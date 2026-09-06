@@ -10,9 +10,10 @@
      and rewrites itself every few minutes, so it is pure telemetry. Anything
      with a personality would grate by lunchtime.
 
-   · SECOND — the rare moments: a block starting, running long, the day
-     opening and closing. Short, direct, second person. No motivational
-     quotes, no exclamation marks, no praise for doing the minimum.
+   · SECOND — the rare moments: something about to start, something that went
+     past unmarked, the day opening and closing. Short, direct, second person.
+     No motivational quotes, no exclamation marks, no praise for doing the
+     minimum.
    ========================================================================== */
 
 import type { Layout, PlacedBlock } from "@/lib/timeline/engine";
@@ -33,8 +34,8 @@ export interface NotificationPayload {
 export const LIVE_TAG = "live";
 export const RITUAL_TAG = "ritual";
 
-/** Warn this many minutes before a running block is due to end. */
-export const ENDING_SOON_MIN = 10;
+/** Warn this many minutes before something fixed is due to begin. */
+export const STARTING_SOON_MIN = 10;
 
 /**
  * The block after this one.
@@ -72,9 +73,7 @@ function spoken(minutes: number): string {
 
 /** Blocks still owed today — the number on the app icon. */
 export function remainingCount(layout: Layout): number {
-  return layout.placed.filter(
-    (p) => p.block.status === "planned" || p.block.status === "active",
-  ).length;
+  return layout.placed.filter((p) => p.block.status === "planned").length;
 }
 
 /* --------------------------------------------------------------------------
@@ -100,10 +99,7 @@ export function composeLive(
   // The title is the block, nothing else. iOS already prefixes the app name,
   // so a title carrying both name and countdown wrapped to three lines and
   // read as noise.
-  const state =
-    current.overrunMin > 0
-      ? `${spoken(displayMin)} over`
-      : `${spoken(displayMin)} left`;
+  const state = `${spoken(displayMin)} left`;
 
   const body = upNext
     ? `${state} · next ${upNext.block.title} at ${formatClock(upNext.startMin)}`
@@ -123,40 +119,29 @@ export function composeLive(
    SECOND — the rare, spoken moments
    -------------------------------------------------------------------------- */
 
-export function composeBlockStarted(
-  block: PlacedBlock,
-  layout: Layout,
-): NotificationPayload {
-  return {
-    tag: `edge-start-${block.block.id}`,
-    title: block.block.title,
-    body: `You gave it ${spoken(block.block.plannedMin)}. Clock's running.`,
-    navigate: "/today",
-    appBadge: remainingCount(layout),
-    silent: false,
-  };
-}
-
 /* ==========================================================================
    Why the noisy notifications carry no live number
    --------------------------------------------------------------------------
    The scheduler runs every minute and transmits a payload whenever its text
    differs from the last one sent under the same tag. A body reading "9m left"
-   and then "8m left" is a different text, so a single block ending produced a
-   buzz a minute for the whole warning window, and a block running long buzzed
-   until it was closed. Four alerts in five minutes, exactly as reported.
+   and then "8m left" is a different text, so a single warning produced a buzz
+   a minute for its whole window. Four alerts in five minutes, exactly as
+   reported.
 
-   So these say the thing once and let the silent live card carry the count.
-   Where a number genuinely has to escalate — running long — it moves in
-   quarter-hour steps under an unchanged tag, which replaces the card on the
-   lock screen instead of adding to it. lib/notify/throttle.ts is the second
-   line of defence, and does not trust this file to stay disciplined.
+   So these say the thing once, in words that are as true on the last minute
+   of the window as on the first, and let the silent live card carry anything
+   that genuinely counts down. lib/notify/throttle.ts is the second line of
+   defence, and does not trust this file to stay disciplined.
    ========================================================================== */
 
-/** How coarsely an escalating number is allowed to move. */
-export const ESCALATION_STEP_MIN = 15;
-
-export function composeEndingSoon(
+/**
+ * Something fixed is about to begin.
+ *
+ * The lead, not a live remainder: it is what "soon" means here, it is true
+ * within a minute of firing, and it never changes underneath — so the same
+ * payload is computed every minute of the window and sent exactly once.
+ */
+export function composeStartingSoon(
   block: PlacedBlock,
   layout: Layout,
   leadMin: number,
@@ -164,52 +149,46 @@ export function composeEndingSoon(
   return {
     tag: `edge-soon-${block.block.id}`,
     title: block.block.title,
-    // The lead, not the live remainder: it is what "soon" means here, it is
-    // true within a minute of firing, and it never changes underneath.
-    body: `${spoken(leadMin)} left. Land the thought.`,
+    body: `Starts at ${formatClock(block.startMin)}, in ${spoken(leadMin)}.`,
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,
   };
 }
 
-export function composeOverrun(
-  block: PlacedBlock,
+/**
+ * Anchors that came and went without being marked either way.
+ *
+ * Takes the whole list rather than one at a time. Three meetings missed over
+ * lunch used to be three separate notifications, released one per throttle
+ * window, so the phone buzzed at half past, twenty to, and ten to — about
+ * things that had all already happened. One card, one tag, one buzz.
+ */
+export function composeMissed(
+  blocks: PlacedBlock[],
   layout: Layout,
 ): NotificationPayload {
-  const squeezed = layout.overflow.length;
-  const consequence =
-    squeezed > 0
-      ? `${squeezed} ${squeezed === 1 ? "block" : "blocks"} no longer fit today.`
-      : "Cut it here, or push the rest down?";
+  const first = blocks[0];
 
-  // Quarter-hour steps. The tag is unchanged, so each new step replaces the
-  // card rather than stacking a second one beside it.
-  const step =
-    Math.floor(block.overrunMin / ESCALATION_STEP_MIN) * ESCALATION_STEP_MIN;
-  const over = step > 0 ? `${spoken(step)} over` : "Running over";
+  if (blocks.length === 1) {
+    return {
+      tag: "edge-missed",
+      title: first.block.title,
+      // No "12 minutes ago": the question is the same at 3 minutes and at 19,
+      // and counting made it a new message every time it was asked.
+      body: `It was due at ${formatClock(first.startMin)}. Did it happen?`,
+      navigate: "/today",
+      appBadge: remainingCount(layout),
+      silent: false,
+    };
+  }
 
   return {
-    tag: `edge-over-${block.block.id}`,
-    title: block.block.title,
-    body: `${over}. ${consequence}`,
-    navigate: "/today",
-    appBadge: remainingCount(layout),
-    silent: false,
-  };
-}
-
-/** An anchor that came and went without being marked either way. */
-export function composeAnchorMissed(
-  block: PlacedBlock,
-  layout: Layout,
-): NotificationPayload {
-  return {
-    tag: `edge-missed-${block.block.id}`,
-    title: block.block.title,
-    // No "12 minutes ago": the question is the same at 3 minutes and at 19,
-    // and counting made it a new message every time it was asked.
-    body: `It was due at ${formatClock(block.startMin)}. Did it happen?`,
+    tag: "edge-missed",
+    title: `${blocks.length} went past unmarked`,
+    body: blocks
+      .map((p) => `${p.block.title} ${formatClock(p.startMin)}`)
+      .join(" · "),
     navigate: "/today",
     appBadge: remainingCount(layout),
     silent: false,

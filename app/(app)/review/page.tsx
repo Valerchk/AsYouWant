@@ -75,9 +75,7 @@ function ReviewScreen({ nowMin }: { nowMin: number }) {
         0,
       ),
       doneCount: done.length,
-      unfinished: blocks.filter(
-        (b) => b.status === "planned" || b.status === "active",
-      ),
+      unfinished: blocks.filter((b) => b.status === "planned"),
     };
   }, [day?.blocks, day?.threads]);
 

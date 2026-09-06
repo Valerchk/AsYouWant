@@ -9,6 +9,7 @@ import { BlockRow, type DragPreview } from "./BlockRow";
 import { GapStrip } from "./GapStrip";
 import { PastStrip } from "./PastStrip";
 import { NowLine } from "./NowLine";
+import { HourScale } from "./HourScale";
 import { OverflowTray } from "./OverflowTray";
 import { DragGhost } from "./DragGhost";
 import { CLOCK_W, RAIL_W } from "./motion";
@@ -22,7 +23,6 @@ interface Props {
   /** False for any day but today: you cannot start a block on Thursday. */
   isToday: boolean;
   onToggleDone: (blockId: string) => void;
-  onStart: (blockId: string) => void;
   onOpenBlock: (blockId: string) => void;
   /** A stretch of open time was tapped: start a block of this length here. */
   onFillGap: (startMin: number, minutes: number) => void;
@@ -42,7 +42,6 @@ export function Ribbon({
   dayEndMin,
   isToday,
   onToggleDone,
-  onStart,
   onOpenBlock,
   onFillGap,
   onPushToTomorrow,
@@ -78,21 +77,6 @@ export function Ribbon({
     [result.slack],
   );
 
-  /* The one block that may be started. It is the block the plan says you
-     should be in right now — and only while nothing else is running, so the
-     ribbon can never offer two. */
-  const startableId = useMemo(() => {
-    if (!isToday || result.running) return null;
-    const owner = result.placed.find(
-      (p) =>
-        p.block.status === "planned" &&
-        !p.block.external &&
-        p.startMin <= nowMin &&
-        nowMin < p.endMin,
-    );
-    return owner?.block.id ?? null;
-  }, [isToday, result.running, result.placed, nowMin]);
-
   const nowY = yForMinute(geo, nowMin);
   const nothingPlanned =
     result.placed.length === 0 && result.overflow.length === 0;
@@ -108,6 +92,10 @@ export function Ribbon({
             background: "var(--color-grid)",
           }}
         />
+
+        {/* The gutter is a ruled scale, drawn once for the whole day rather
+            than a time reprinted beside every block. */}
+        <HourScale geo={geo} />
 
         {isToday && nowMin >= geo.startMin && nowMin <= geo.endMin && (
           <NowLine y={nowY} nowMin={nowMin} />
@@ -129,9 +117,7 @@ export function Ribbon({
                   threadById(threads, seg.placed.block.threadId),
                 )}
                 slackMin={slackByBlock.get(seg.placed.block.id) ?? 0}
-                startable={startableId === seg.placed.block.id}
                 onToggleDone={onToggleDone}
-                onStart={onStart}
                 onOpen={onOpenBlock}
                 minuteAt={(offsetY) => minuteForY(geo, seg.top + offsetY)}
                 onMove={onMoveBlock}

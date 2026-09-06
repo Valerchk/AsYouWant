@@ -6,6 +6,15 @@ const NOW = 1_800_000_000_000;
 const agoMin = (m: number) => ({ tag: "x", sentAt: NOW - m * MIN });
 
 describe("how often the app may buzz", () => {
+  it("keeps ten clear minutes between two buzzes", () => {
+    // The number the person asked for, pinned so it cannot drift back down
+    // in a later refactor: two notifications inside ten minutes read as the
+    // app losing its composure, however reasonable each one was alone.
+    expect(GAP_MIN).toBe(10);
+    expect(mayInterrupt([agoMin(9)], NOW)).toBe(false);
+    expect(mayInterrupt([agoMin(11)], NOW)).toBe(true);
+  });
+
   it("allows the first interruption", () => {
     expect(mayInterrupt([], NOW)).toBe(true);
   });

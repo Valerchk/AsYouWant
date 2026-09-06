@@ -55,12 +55,8 @@ export interface PlacedBlock {
   block: Block;
   startMin: number;
   endMin: number;
-  /** The block currently running. At most one per day. */
-  isRunning: boolean;
-  /** Wholly in the past and never started — a missed anchor. */
+  /** Wholly in the past and still unmarked — a missed anchor. */
   isMissed: boolean;
-  /** Minutes the running block has spent beyond its planned length. */
-  overrunMin: number;
 }
 
 export interface Slack {
@@ -74,7 +70,6 @@ export interface Layout {
   /** Flow blocks with no room left before the day ends. */
   overflow: Block[];
   slack: Slack[];
-  running: PlacedBlock | null;
   /** Unclaimed minutes between now and the end of the day. */
   freeMin: number;
 }
@@ -140,28 +135,26 @@ export function layout(blocks: Block[], ctx: DayContext): Layout {
   const nowMin = ctx.nowMin;
 
   // Dropped and carried blocks left this day on purpose.
-  const live = blocks.filter(
-    (b) => b.status !== "dropped" && b.status !== "carried",
-  );
+  const live = blocks
+    .filter((b) => b.status !== "dropped" && b.status !== "carried")
+    /* "active" meant a block someone had pressed Start on. Nothing produces
+       that state any more — the day is planned, not stopwatched — but rows
+       from when it did still exist, and a block whose status matches no branch
+       below would simply vanish from its own day. Read as ordinary plan. */
+    .map((b) =>
+      b.status === "active" ? { ...b, status: "planned" as const } : b,
+    );
 
   const placed: PlacedBlock[] = [];
   const occupied: Span[] = [];
   const slack: Slack[] = [];
-  let running: PlacedBlock | null = null;
 
   /* --- 1. History. Finished blocks hold the time they actually took. ------ */
   for (const b of live) {
     if (b.status !== "done") continue;
     const start = b.actualStartMin ?? b.startMin ?? dayStartMin;
     const end = b.actualEndMin ?? start + b.plannedMin;
-    placed.push({
-      block: b,
-      startMin: start,
-      endMin: end,
-      isRunning: false,
-      isMissed: false,
-      overrunMin: 0,
-    });
+    placed.push({ block: b, startMin: start, endMin: end, isMissed: false });
     occupied.push({ start, end });
 
     // Finishing early is the moment the ribbon exists for: it hands minutes
@@ -172,26 +165,7 @@ export function layout(blocks: Block[], ctx: DayContext): Layout {
     }
   }
 
-  /* --- 2. The running block. Stretches to now once it passes its plan. ---- */
-  for (const b of live) {
-    if (b.status !== "active") continue;
-    const start = b.actualStartMin ?? b.startMin ?? nowMin;
-    const plannedEnd = start + b.plannedMin;
-    const end = Math.max(plannedEnd, nowMin);
-    const entry: PlacedBlock = {
-      block: b,
-      startMin: start,
-      endMin: end,
-      isRunning: true,
-      isMissed: false,
-      overrunMin: Math.max(0, nowMin - plannedEnd),
-    };
-    placed.push(entry);
-    occupied.push({ start, end });
-    running = entry;
-  }
-
-  /* --- 3. Anchors. Pinned to their time, including ones already past. -----
+  /* --- 2. Anchors. Pinned to their time, including ones already past. -----
      A missed 09:00 meeting is still a fact of the day at 10:00. Hiding it
      would make the ribbon agree with a day that did not happen. */
   for (const b of live) {
@@ -202,14 +176,12 @@ export function layout(blocks: Block[], ctx: DayContext): Layout {
       block: b,
       startMin: start,
       endMin: end,
-      isRunning: false,
       isMissed: end <= nowMin,
-      overrunMin: 0,
     });
     occupied.push({ start, end });
   }
 
-  /* --- 4. Flow. Poured into what is left, in the order the author set. ----
+  /* --- 3. Flow. Poured into what is left, in the order the author set. ----
      The cursor only ever moves forward, so a short block can never leapfrog
      a long one just because it happens to fit an earlier gap. */
   const merged = mergeSpans(occupied);
@@ -227,20 +199,13 @@ export function layout(blocks: Block[], ctx: DayContext): Layout {
       continue;
     }
     const end = slot + b.plannedMin;
-    placed.push({
-      block: b,
-      startMin: slot,
-      endMin: end,
-      isRunning: false,
-      isMissed: false,
-      overrunMin: 0,
-    });
+    placed.push({ block: b, startMin: slot, endMin: end, isMissed: false });
     merged.push({ start: slot, end });
     merged.sort((x, y) => x.start - y.start);
     cursor = end;
   }
 
-  /* --- 5. What is genuinely left of the day. ----------------------------- */
+  /* --- 4. What is genuinely left of the day. ----------------------------- */
   const settled = mergeSpans(merged);
   let freeMin = 0;
   let scan = Math.max(nowMin, dayStartMin);
@@ -254,5 +219,5 @@ export function layout(blocks: Block[], ctx: DayContext): Layout {
 
   placed.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 
-  return { placed, overflow, slack, running, freeMin: Math.max(0, freeMin) };
+  return { placed, overflow, slack, freeMin: Math.max(0, freeMin) };
 }

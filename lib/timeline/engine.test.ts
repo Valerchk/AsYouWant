@@ -42,7 +42,6 @@ describe("empty day", () => {
     expect(r.placed).toEqual([]);
     expect(r.overflow).toEqual([]);
     expect(r.slack).toEqual([]);
-    expect(r.running).toBeNull();
     // 09:00 → 22:00
     expect(r.freeMin).toBe(H(13));
   });
@@ -249,94 +248,33 @@ describe("finishing early", () => {
   });
 });
 
-describe("the running block", () => {
-  it("is reported as running and holds its planned span", () => {
-    const active = block({
-      plannedMin: 90,
-      status: "active",
-      actualStartMin: H(9),
-    });
-    const r = layout([active], { ...DAY, nowMin: H(9, 40) });
+describe("a block left over from when blocks could be started", () => {
+  it("is laid out as an ordinary part of the plan", () => {
+    // Nothing produces "active" any more. Rows carrying it predate that, and
+    // every branch below keys off "planned" or "done" — so without being read
+    // as plan such a block would match none of them and leave its own day.
+    const stale = block({ plannedMin: 90, status: "active", sortOrder: 1 });
+    const after = block({ plannedMin: 30, sortOrder: 2 });
 
-    expect(r.running?.block.id).toBe(active.id);
-    expect(r.running).toMatchObject({
-      startMin: H(9),
-      endMin: H(10, 30),
-      overrunMin: 0,
-    });
+    const r = layout([stale, after], { ...DAY, nowMin: H(9) });
+
+    expect(r.placed).toHaveLength(2);
+    expect(at(r, stale.id)).toMatchObject({ startMin: H(9), endMin: H(10, 30) });
+    expect(at(r, after.id)!.startMin).toBe(H(10, 30));
   });
 
-  it("stretches past its plan and reports the overrun", () => {
-    const active = block({
-      plannedMin: 60,
-      status: "active",
-      actualStartMin: H(9),
-    });
-    const r = layout([active], { ...DAY, nowMin: H(10, 12) });
+  it("never stretches past its planned length the way a running one did", () => {
+    // The old engine grew a running block to meet `now`. A planner states the
+    // plan; it does not grow a block because time passed while nobody looked.
+    const stale = block({ plannedMin: 60, status: "active" });
+    const r = layout([stale], { ...DAY, nowMin: H(11) });
 
-    expect(r.running).toMatchObject({ endMin: H(10, 12), overrunMin: 12 });
-  });
-
-  it("pushes the rest of the day down while it overruns", () => {
-    const active = block({
-      plannedMin: 60,
-      sortOrder: 1,
-      status: "active",
-      actualStartMin: H(9),
-    });
-    const next = block({ plannedMin: 30, sortOrder: 2 });
-    const r = layout([active, next], { ...DAY, nowMin: H(10, 12) });
-
-    expect(at(r, next.id)!.startMin).toBe(H(10, 12));
-  });
-
-  it("can overrun a block straight into overflow at the end of the day", () => {
-    const active = block({
-      plannedMin: 30,
-      sortOrder: 1,
-      status: "active",
-      actualStartMin: H(20),
-    });
-    const next = block({ plannedMin: 60, sortOrder: 2 });
-    const r = layout([active, next], {
-      ...DAY,
-      nowMin: H(20, 40),
-      dayEndMin: H(21),
-    });
-
-    expect(r.overflow.map((b) => b.id)).toEqual([next.id]);
-  });
-});
-
-describe("blocks excluded from the day", () => {
-  it("ignores dropped and carried blocks entirely", () => {
-    const r = layout(
-      [
-        block({ status: "dropped", plannedMin: 60 }),
-        block({ status: "carried", plannedMin: 60 }),
-      ],
-      DAY,
-    );
-
-    expect(r.placed).toEqual([]);
-    expect(r.overflow).toEqual([]);
-    expect(r.freeMin).toBe(H(13));
-  });
-});
-
-describe("ordering of the result", () => {
-  it("returns placed blocks in chronological order regardless of input", () => {
-    const late = anchor(H(16), 30);
-    const early = anchor(H(9, 30), 30);
-    const mid = anchor(H(12), 30);
-    const r = layout([late, early, mid], DAY);
-
-    expect(r.placed.map((p) => p.block.id)).toEqual([early.id, mid.id, late.id]);
+    expect(at(r, stale.id)!.endMin).toBe(H(12));
   });
 });
 
 describe("a realistic day", () => {
-  it("reconciles history, a running overrun, anchors and overflow at once", () => {
+  it("reconciles history, anchors, flow and overflow at once", () => {
     const morning = block({
       title: "thesis",
       plannedMin: 90,
@@ -346,30 +284,25 @@ describe("a realistic day", () => {
       actualEndMin: H(10, 12), // 18 minutes early
     });
     const standup = anchor(H(11), 30, { title: "standup" });
-    const running = block({
-      title: "review",
-      plannedMin: 45,
-      sortOrder: 2,
-      status: "active",
-      actualStartMin: H(10, 12),
-    });
+    const review = block({ title: "review", plannedMin: 45, sortOrder: 2 });
     const gym = block({ title: "gym", plannedMin: 60, sortOrder: 3 });
     const reading = block({ title: "reading", plannedMin: 60, sortOrder: 4 });
 
-    // 11:05 — review has run 8 minutes long and collided with standup.
-    const r = layout([morning, standup, running, gym, reading], {
+    // 11:05 — the morning gave 18 minutes back, standup holds its hour, and
+    // what is left of the day cannot take everything that is still owed.
+    const r = layout([morning, standup, review, gym, reading], {
       nowMin: H(11, 5),
       dayStartMin: H(8),
       dayEndMin: H(12, 30),
     });
 
     expect(r.slack).toEqual([{ afterId: morning.id, minutes: 18 }]);
-    expect(r.running?.overrunMin).toBe(8);
     expect(at(r, standup.id)!.startMin).toBe(H(11));
 
-    // Only 11:30–12:30 is left, so gym takes it and reading falls out.
-    expect(at(r, gym.id)).toMatchObject({ startMin: H(11, 30) });
-    expect(r.overflow.map((b) => b.id)).toEqual([reading.id]);
-    expect(r.freeMin).toBe(0);
+    // Review waits for standup to finish, which leaves a quarter of an hour
+    // and nowhere to put an hour of gym.
+    expect(at(r, review.id)).toMatchObject({ startMin: H(11, 30) });
+    expect(r.overflow.map((b) => b.id)).toEqual([gym.id, reading.id]);
+    expect(r.freeMin).toBe(15);
   });
 });

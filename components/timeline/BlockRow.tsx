@@ -9,6 +9,21 @@ import { Icon } from "@/components/icons/Icon";
 import { GoalIcon, isGoalIcon } from "@/components/icons/GoalIcon";
 import { CLOCK_W, RAIL_W, RIBBON_SPRING } from "./motion";
 
+/* ==========================================================================
+   One block on the ribbon.
+   --------------------------------------------------------------------------
+   A card that states its own span. The clock gutter to its left is a ruled
+   scale now rather than a column of per-block labels, so the hour a block
+   occupies belongs on the block: "~22:51 – 23:21 · 30m", one line, said once.
+
+   There is no way to start a block here, and that is deliberate. The screen
+   plans a day and shows it whole; it does not ask to be told, minute by
+   minute, what you are doing — an app that only tells the truth while you
+   keep feeding it is an app that is wrong by Tuesday. What you do mark is
+   that something happened, which is what the marker on the rail is for and
+   what the Goals tab counts.
+   ========================================================================== */
+
 export interface DragPreview {
   min: number;
   mode: "time" | "insert";
@@ -16,16 +31,13 @@ export interface DragPreview {
 
 interface Props {
   segment: BlockSegment;
-  /** Used to show how far through the running block we are. */
+  /** Used only to tell which block the clock is currently inside. */
   nowMin: number;
   /** Colour and icon, already resolved against the block's goal. */
   look: Look;
   /** Minutes this block handed back by finishing early. */
   slackMin: number;
-  /** True for the one block that may be started right now. */
-  startable: boolean;
   onToggleDone: (blockId: string) => void;
-  onStart: (blockId: string) => void;
   onOpen: (blockId: string) => void;
   /** Pixel offset → the minute it lands on. Non-linear, so it comes from
       geometry rather than from dividing by a scale factor. */
@@ -42,9 +54,7 @@ export function BlockRow({
   nowMin,
   look,
   slackMin,
-  startable,
   onToggleDone,
-  onStart,
   onOpen,
   minuteAt,
   onMove,
@@ -52,15 +62,15 @@ export function BlockRow({
   onDragPreview,
 }: Props) {
   const { placed, top, height } = segment;
-  const { block, isRunning, isMissed, overrunMin } = placed;
+  const { block, isMissed } = placed;
   const done = block.status === "done";
 
   // Someone else's record of your day: it holds its hour so free time stays
   // honest, and nothing here may change it.
   const external = block.external === true;
 
-  // Finished and running blocks are history: dragging them would rewrite what
-  // already happened. Only what is still planned can be moved.
+  // Finished blocks are history: dragging them would rewrite what already
+  // happened. Only what is still planned can be moved.
   const draggable = block.status === "planned" && !external;
 
   /* An anchor lives on the clock, so dragging it changes when. A flow block
@@ -70,13 +80,12 @@ export function BlockRow({
   const dragMode: DragPreview["mode"] =
     block.kind === "anchor" ? "time" : "insert";
 
-  // The block that owns this minute. The now-line no longer crosses the
-  // titles, so the current block has to say so itself.
-  const holdsNow =
-    placed.startMin <= nowMin && nowMin < placed.endMin && !done;
-  const progress = holdsNow
-    ? Math.min(1, (nowMin - placed.startMin) / Math.max(1, placed.endMin - placed.startMin))
-    : 0;
+  /* The block the clock is inside. Not a claim that you are doing it — the
+     app has no way of knowing that and no longer pretends to — but a claim
+     about where you are in your own plan, which is the question this screen
+     exists to answer at a glance. */
+  const holdsNow = placed.startMin <= nowMin && nowMin < placed.endMin && !done;
+
   const [dragMin, setDragMin] = useState<number | null>(null);
   // Held from the moment the grip is taken, rather than from the first
   // movement, so the well lights up under the thumb that is already on it.
@@ -87,16 +96,9 @@ export function BlockRow({
 
   const own = lookColor(look);
   const colour = own ?? "var(--color-rule)";
-  const accent = isRunning
-    ? overrunMin > 0
-      ? "var(--color-over)"
-      : "var(--color-accent)"
-    : colour;
 
   /* The block is filled with its own colour, which is what lets a day be read
-     as a distribution of time from across the room. The colour is the block's
-     — chosen while writing it, or inherited from its goal when it has one and
-     said nothing itself.
+     as a distribution of time from across the room.
 
      Mixed with paper rather than laid down at full strength, and that is not
      timidity: in the light theme the palette runs to mid tones (#b0741c,
@@ -104,8 +106,8 @@ export function BlockRow({
      same colours are pale (#e0a94d) where ink text fails instead. One mix
      keeps every one of the sixteen readable in both themes without a second
      hand-tuned token per colour. Full strength is spent where it costs
-     nothing: the rail, the icon, the progress line. */
-  const strength = done ? 10 : holdsNow ? 30 : 20;
+     nothing: the spine down the card's edge, and the icon. */
+  const strength = done ? 10 : holdsNow ? 28 : 18;
   const fill = external
     ? "transparent"
     : own
@@ -114,6 +116,8 @@ export function BlockRow({
         ? "transparent"
         : "var(--color-sunk)";
 
+  const panelLeft = CLOCK_W + RAIL_W;
+
   return (
     <motion.div
       // `top` is real CSS, not an animated transform. Carrying the position
@@ -121,7 +125,9 @@ export function BlockRow({
       // run stacked every segment at one point, and the overlapping hit areas
       // swallowed taps. Layout must never depend on animation.
       layout
-      className="absolute inset-x-0 z-10"
+      // The day bar scrolls to a block by id; nothing else uses this.
+      id={`block-${block.id}`}
+      className="absolute inset-x-0 z-10 scroll-mt-24"
       style={{ top, height }}
       transition={RIBBON_SPRING}
       // Faded while in flight, so the ghost showing where it lands is the
@@ -129,13 +135,13 @@ export function BlockRow({
       // thumb disappears, which is what 0.35 did.
       animate={{ opacity: dragMin !== null ? 0.55 : 1 }}
     >
-      {/* The block itself. Inset by a pixel top and bottom so two blocks that
-          abut in time keep a seam of paper between them rather than merging
-          into one field of colour. */}
+      {/* The card. Inset by a pixel top and bottom so two blocks that abut in
+          time keep a seam of paper between them rather than merging into one
+          field of colour. */}
       <div
         className="pointer-events-none absolute rounded-edge"
         style={{
-          left: CLOCK_W + RAIL_W,
+          left: panelLeft,
           right: 0,
           top: 1,
           bottom: 1,
@@ -147,25 +153,21 @@ export function BlockRow({
         }}
       />
 
-      {/* How much of it has gone. One thin line, along the bottom edge of the
-          block, at the colour's full strength. */}
-      {holdsNow && (
+      {/* The spine. Full strength down the card's leading edge, where colour
+          costs no legibility at all — it is what makes a day scannable by
+          colour from arm's length even though the fills are gentle. */}
+      {!external && own && (
         <div
-          className="pointer-events-none absolute right-0 h-[2px]"
+          className="pointer-events-none absolute rounded-l-edge"
           style={{
-            left: CLOCK_W + RAIL_W,
+            left: panelLeft,
+            width: 3,
+            top: 1,
             bottom: 1,
-            background: "var(--color-rule)",
+            background: colour,
+            opacity: done ? 0.35 : 1,
           }}
-        >
-          <motion.div
-            className="h-full"
-            style={{ background: accent }}
-            initial={false}
-            animate={{ width: `${progress * 100}%` }}
-            transition={{ type: "spring", stiffness: 160, damping: 30 }}
-          />
-        </div>
+        />
       )}
 
       <div
@@ -174,31 +176,16 @@ export function BlockRow({
           gridTemplateColumns: `${CLOCK_W}px ${RAIL_W}px minmax(0,1fr) auto`,
         }}
       >
-        {/* clock — right-aligned so colons line up down the whole day.
-
-            A block with no hour of its own is printed with a tilde: it starts
-            about then, and will start somewhere else if the morning slips.
-            One character does the work the words "anchored" and "flows" were
-            failing to do. */}
-        <div className="num pt-3 pr-2.5 text-right text-micro leading-5">
-          <span
-            className={
-              isRunning ? "text-accent" : done || external ? "text-faint" : "text-ink"
-            }
-          >
-            {block.kind === "flow" && !done && (
-              <span className="text-faint">~</span>
-            )}
-            {formatClock(placed.startMin)}
-          </span>
-        </div>
+        {/* The clock gutter belongs to the hour scale now, drawn once for the
+            whole ribbon. This column is the space it occupies. */}
+        <div aria-hidden />
 
         {/* rail: the thread runs through the block, the marker knots it */}
         <div className="relative">
           <div
             className="absolute top-0 bottom-0 left-1/2 w-[3px] -translate-x-1/2"
             style={{
-              background: external ? "none" : accent,
+              background: external ? "none" : colour,
               backgroundImage: external
                 ? "repeating-linear-gradient(to bottom, var(--color-rule) 0 4px, transparent 4px 8px)"
                 : undefined,
@@ -218,7 +205,7 @@ export function BlockRow({
               // keeps it above the neighbouring segment, which would otherwise
               // take the tap where the two areas meet.
               className="absolute left-1/2 z-20 flex h-10 w-10 -translate-x-1/2 items-center justify-center"
-              style={{ top: 2 }}
+              style={{ top: 4 }}
             >
               <motion.span
                 className="flex h-[18px] w-[18px] items-center justify-center rounded-plate"
@@ -226,20 +213,14 @@ export function BlockRow({
                 whileTap={{ scale: 0.82 }}
                 transition={{ type: "spring", stiffness: 500, damping: 24 }}
                 style={{
-                  background: done ? accent : "var(--color-paper)",
+                  background: done ? colour : "var(--color-paper)",
                   boxShadow: `inset 0 0 0 1.5px ${
-                    isMissed ? "var(--color-over)" : accent
+                    isMissed ? "var(--color-over)" : colour
                   }`,
                 }}
               >
                 {done && <Icon name="check" size={11} className="text-paper" />}
               </motion.span>
-              {isRunning && (
-                <span
-                  className="pulse-ring pointer-events-none absolute h-[18px] w-[18px] rounded-plate"
-                  style={{ boxShadow: `0 0 0 1.5px ${accent}` }}
-                />
-              )}
             </button>
           )}
         </div>
@@ -248,10 +229,8 @@ export function BlockRow({
             closing a block never accidentally opens its editor.
 
             The tap area is a button behind the text rather than around it,
-            because the goal's mark and the start control inside need to be
-            their own buttons and HTML will not nest one button in another.
-            Everything above it is transparent to taps except those. */}
-        <div className="relative min-w-0 pt-3 pr-2">
+            because everything drawn over it must stay transparent to taps. */}
+        <div className="relative min-w-0 pt-3 pr-2 pl-3">
           {!external && (
             <button
               type="button"
@@ -264,149 +243,113 @@ export function BlockRow({
           )}
 
           <div
-            className={`pointer-events-none relative truncate text-lede leading-5 ${
-              done || external ? "text-faint" : isRunning ? "text-deep" : "text-ink"
+            className={`pointer-events-none relative truncate text-lede leading-6 ${
+              done ? "text-faint line-through decoration-faint/50" : external ? "text-faint" : "text-deep"
             }`}
           >
             {block.title}
           </div>
-          <div className="pointer-events-none relative mt-1.5 flex items-center gap-2 text-fine leading-none">
-            {external ? (
-              <span className="flex items-center gap-1.5 text-faint">
-                <Icon name="crossSection" size={12} className="shrink-0" />
-                <span className="truncate">calendar</span>
-              </span>
-            ) : (
-              /* A mark, not a word. The block is already wearing its colour,
-                 so a name underneath would say the same thing twice and cost
-                 the row a line of text it cannot spare. Drawn only when there
-                 is an icon: an empty ring beside a coloured block was one more
-                 thing to look at that said nothing. */
-              isGoalIcon(look.icon) && (
-                <span className="flex shrink-0 items-center">
-                  <GoalIcon
-                    name={look.icon}
-                    size={14}
-                    style={{ color: colour }}
-                  />
-                </span>
-              )
-            )}
 
-            {isMissed && <span className="shrink-0 text-over">missed</span>}
-            {isRunning && overrunMin > 0 && (
-              <span className="num shrink-0 text-over">
-                {formatDuration(overrunMin)} over
-              </span>
+          {/* The block's own span, on the block. A tilde means it has no hour
+              of its own: it starts about then, and will start somewhere else
+              if the morning slips. One character does the work the words
+              "anchored" and "flows" were failing to do. */}
+          <div className="pointer-events-none relative mt-1 flex items-center gap-2 text-micro leading-none">
+            {isGoalIcon(look.icon) && !external && (
+              <GoalIcon
+                name={look.icon}
+                size={13}
+                className="shrink-0"
+                style={{ color: colour }}
+              />
             )}
-
-            {/* The verb the app was missing. It appears on the one block that
-                owns this minute, so the ribbon never carries more than one. */}
-            {startable && (
-              <button
-                type="button"
-                onClick={() => onStart(block.id)}
-                className="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-edge bg-accent-soft px-2 py-1 text-micro text-accent ring-1 ring-accent/40 transition-colors hover:bg-accent hover:text-paper"
-              >
-                <svg width="9" height="10" viewBox="0 0 9 10" fill="none" aria-hidden>
-                  <path
-                    d="M1 1v8l7-4z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinejoin="miter"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                </svg>
-                Start
-              </button>
-            )}
-
-            {isRunning && (
-              <span className="num ml-auto shrink-0 text-micro text-accent">
-                {formatDuration(Math.max(0, nowMin - placed.startMin))} in
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* duration, what the block gave back, and the drag handle */}
-        <div className="flex flex-col items-end gap-1 pt-3">
-          <div className="flex items-center gap-1.5">
-            {/* The anchor icon used to sit here saying "this one is fixed".
-                The tilde in the clock gutter says it, by its absence. */}
-            <span
-              className={`num text-micro leading-5 ${
-                done || external ? "text-faint" : "text-ink"
-              }`}
-            >
+            <span className={`num shrink-0 ${done ? "text-faint" : "text-ink"}`}>
+              {block.kind === "flow" && !done && (
+                <span className="text-faint">~</span>
+              )}
+              {formatClock(placed.startMin)}
+              <span className="text-faint">–</span>
+              {formatClock(placed.endMin)}
+            </span>
+            <span className="text-faint">·</span>
+            <span className="num shrink-0 text-faint">
               {formatDuration(placed.endMin - placed.startMin)}
             </span>
 
-            {/* Dragging is a deliberate grab, not something the whole row
-                does. Grabbing the body meant every attempt to scroll risked
-                moving a block.
-
-                Drawn as a grip sunk into a well, because the previous version
-                — two hairlines in the faintest ink the palette has — was
-                indistinguishable from a rule, and a control nobody recognises
-                as a control is a feature that does not exist. The well is
-                paper against the block's tint, so it reads as recessed on a
-                coloured block and on a plain one alike. */}
-            {draggable && (
-              <motion.button
-                type="button"
-                aria-label={
-                  dragMode === "time"
-                    ? `Move ${block.title} to another time`
-                    : `Reorder ${block.title}`
-                }
-                title={
-                  dragMode === "time"
-                    ? "Drag to another hour"
-                    : "Drag to move it up or down the queue"
-                }
-                className="-mr-1 flex h-9 w-8 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-                drag="y"
-                dragMomentum={false}
-                dragElastic={0}
-                dragConstraints={{ top: 0, bottom: 0 }}
-                onDragStart={() => {
-                  moved.current = true;
-                  setGrabbed(true);
-                }}
-                onDrag={(_, info) => {
-                  const m = Math.round(minuteAt(info.offset.y) / 15) * 15;
-                  setDragMin(m);
-                  onDragPreview({ min: m, mode: dragMode });
-                }}
-                onDragEnd={(_, info) => {
-                  // Fifteen minutes, not five: five is about seven pixels on a
-                  // phone, which no thumb can aim at.
-                  const raw = minuteAt(info.offset.y);
-                  const target = Math.round(raw / 15) * 15;
-                  if (dragMode === "time") onMove(block.id, target);
-                  else onReorder(block.id, target);
-                  setDragMin(null);
-                  setGrabbed(false);
-                  onDragPreview(null);
-                  setTimeout(() => {
-                    moved.current = false;
-                  }, 0);
-                }}
-                whileDrag={{ scale: 1.15 }}
-              >
-                <span
-                  className={`flex h-7 w-[26px] items-center justify-center rounded-edge ring-1 transition-colors ${
-                    grabbed
-                      ? "bg-accent text-paper ring-accent"
-                      : "bg-paper text-ink ring-rule"
-                  }`}
-                >
-                  <Icon name="grip" size={16} />
-                </span>
-              </motion.button>
+            {external && (
+              <span className="flex shrink-0 items-center gap-1.5 text-faint">
+                <Icon name="crossSection" size={11} />
+                calendar
+              </span>
             )}
+            {isMissed && <span className="shrink-0 text-over">missed</span>}
           </div>
+        </div>
+
+        {/* what the block gave back, and the drag handle */}
+        <div className="flex flex-col items-end gap-1 pt-3">
+          {/* Dragging is a deliberate grab, not something the whole row does.
+              Grabbing the body meant every attempt to scroll risked moving a
+              block.
+
+              Drawn as a grip sunk into a well, because the previous version —
+              two hairlines in the faintest ink the palette has — was
+              indistinguishable from a rule, and a control nobody recognises as
+              a control is a feature that does not exist. */}
+          {draggable && (
+            <motion.button
+              type="button"
+              aria-label={
+                dragMode === "time"
+                  ? `Move ${block.title} to another time`
+                  : `Reorder ${block.title}`
+              }
+              title={
+                dragMode === "time"
+                  ? "Drag to another hour"
+                  : "Drag to move it up or down the queue"
+              }
+              className="-mr-1 flex h-9 w-8 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
+              drag="y"
+              dragMomentum={false}
+              dragElastic={0}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              onDragStart={() => {
+                moved.current = true;
+                setGrabbed(true);
+              }}
+              onDrag={(_, info) => {
+                const m = Math.round(minuteAt(info.offset.y) / 15) * 15;
+                setDragMin(m);
+                onDragPreview({ min: m, mode: dragMode });
+              }}
+              onDragEnd={(_, info) => {
+                // Fifteen minutes, not five: five is about seven pixels on a
+                // phone, which no thumb can aim at.
+                const raw = minuteAt(info.offset.y);
+                const target = Math.round(raw / 15) * 15;
+                if (dragMode === "time") onMove(block.id, target);
+                else onReorder(block.id, target);
+                setDragMin(null);
+                setGrabbed(false);
+                onDragPreview(null);
+                setTimeout(() => {
+                  moved.current = false;
+                }, 0);
+              }}
+              whileDrag={{ scale: 1.15 }}
+            >
+              <span
+                className={`flex h-7 w-[26px] items-center justify-center rounded-edge ring-1 transition-colors ${
+                  grabbed
+                    ? "bg-accent text-paper ring-accent"
+                    : "bg-paper text-ink ring-rule"
+                }`}
+              >
+                <Icon name="grip" size={16} />
+              </span>
+            </motion.button>
+          )}
 
           {/* The payoff of the ribbon, shown on the block that produced it
               rather than floating on the boundary between two blocks — where
@@ -416,15 +359,9 @@ export function BlockRow({
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ type: "spring", stiffness: 420, damping: 26 }}
-              className="num flex items-center gap-1 text-micro text-accent"
+              className="num flex items-center gap-1 pr-1 text-micro text-accent"
             >
-              <svg
-                width="9"
-                height="10"
-                viewBox="0 0 9 10"
-                fill="none"
-                aria-hidden
-              >
+              <svg width="9" height="10" viewBox="0 0 9 10" fill="none" aria-hidden>
                 <path
                   d="M4.5 9.5V1M1 4.5 4.5 1 8 4.5"
                   stroke="currentColor"

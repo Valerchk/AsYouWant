@@ -6,6 +6,20 @@ import { formatClock, formatDuration } from "@/lib/time";
 import { Icon } from "@/components/icons/Icon";
 import { CLOCK_W, RAIL_W, RIBBON_SPRING } from "./motion";
 
+/* ==========================================================================
+   Time nobody has claimed.
+   --------------------------------------------------------------------------
+   Planning is the whole job of this screen, so the parts of the day that are
+   still free are the parts that matter most — and they used to be drawn as an
+   apology: a hairline and four words of grey. An empty afternoon read as a
+   defect rather than as the opportunity it is.
+
+   Open time ahead of you is now a field you can put something in, the size of
+   the hours it stands for, asking to be tapped. Time already gone is stated
+   quietly and offers nothing, because there is nothing it could honestly
+   offer.
+   ========================================================================== */
+
 interface Props {
   segment: GapSegment;
   nowMin: number;
@@ -75,16 +89,16 @@ export function GapStrip({ segment, nowMin, onFill }: Props) {
         <button
           type="button"
           onClick={() => onFill(openFrom, openMin)}
-          className="group absolute inset-y-0 flex items-center gap-2 text-fine text-faint transition-colors hover:text-accent"
-          style={{ left: CLOCK_W + RAIL_W }}
+          className="group absolute inset-y-1 flex items-center justify-center gap-2 rounded-edge border border-dashed border-rule/70 text-faint transition-colors hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent"
+          style={{ left: CLOCK_W + RAIL_W, right: 0 }}
         >
           <Icon
             name="plus"
             size={13}
-            className="opacity-0 transition-opacity group-hover:opacity-100"
+            className="shrink-0 opacity-50 transition-opacity group-hover:opacity-100"
           />
-          <span className="num">{formatDuration(openMin)} open</span>
-          <span className="num text-micro opacity-60">
+          <span className="num text-fine">{formatDuration(openMin)} open</span>
+          <span className="num text-micro opacity-55">
             {formatClock(openFrom)}–{formatClock(endMin)}
           </span>
         </button>

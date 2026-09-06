@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { carriedCopy, closeBlock, pauseBlock, startBlock } from "./actions";
+import { carriedCopy, closeBlock } from "./actions";
 import { layout, type Block } from "./engine";
 
 const H = (h: number, m = 0) => h * 60 + m;
@@ -72,55 +72,32 @@ describe("closing a block", () => {
 
 /* -------------------------------------------------------------------------- */
 
-describe("starting a block", () => {
-  it("marks it running from this minute", () => {
-    const b = block({ plannedMin: 45 });
-    const started = startBlock(b, H(10, 20));
+describe("a status left over from when blocks could be started", () => {
+  it("stays in the plan rather than vanishing from its own day", () => {
+    // "active" is no longer produced by anything, but rows carrying it exist.
+    // Every branch of the engine keys off "planned" or "done", so without a
+    // deliberate reading such a block would match none of them and silently
+    // disappear from the day it belongs to.
+    const stale = block({ status: "active", kind: "anchor", startMin: H(10) });
 
-    expect(started.status).toBe("active");
-    expect(started.actualStartMin).toBe(H(10, 20));
-    expect(started.actualEndMin).toBe(null);
-  });
-
-  it("is what makes running over observable at all", () => {
-    // The hole this fixes: nothing in the app could set status "active", so
-    // `layout.running` was always null, `overrunMin` was always zero, and the
-    // notification about running long could never fire in production.
-    const b = block({ plannedMin: 30 });
-    const started = startBlock(b, H(10));
-
-    const result = layout([started], {
-      nowMin: H(10, 50),
+    const result = layout([stale], {
+      nowMin: H(9),
       dayStartMin: H(8),
       dayEndMin: H(22),
     });
 
-    expect(result.running?.block.id).toBe(b.id);
-    expect(result.running?.overrunMin).toBe(20);
-  });
-
-  it("keeps the minutes a paused block genuinely got", () => {
-    const running = startBlock(block({ plannedMin: 60 }), H(10));
-    const paused = pauseBlock(running, H(10, 25));
-
-    expect(paused.status).toBe("done");
-    expect(paused.actualStartMin).toBe(H(10));
-    expect(paused.actualEndMin).toBe(H(10, 25));
-  });
-
-  it("never records a pause as negative time", () => {
-    const running = startBlock(block({ plannedMin: 60 }), H(10));
-    // A clock that has gone backwards, or a stale render.
-    expect(pauseBlock(running, H(9)).actualEndMin).toBe(H(10));
+    expect(result.placed).toHaveLength(1);
+    expect(result.placed[0].startMin).toBe(H(10));
   });
 });
 
 describe("carrying a block to another day", () => {
-  it("arrives whole and unstarted", () => {
+  it("arrives whole and unfinished", () => {
     const b = block({
       plannedMin: 45,
-      status: "active",
+      status: "done",
       actualStartMin: H(10),
+      actualEndMin: H(10, 45),
       threadId: "t1",
     });
     const copy = carriedCopy(b);

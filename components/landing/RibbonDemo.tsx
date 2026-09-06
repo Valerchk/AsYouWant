@@ -7,9 +7,9 @@ import { formatClock, formatDuration } from "@/lib/time";
 /* ==========================================================================
    The pitch, performed rather than described.
    --------------------------------------------------------------------------
-   A short loop: a block is running, it closes fifteen minutes early, and the
-   rest of the day springs upward into the minutes it handed back. That
-   compression is the whole product, and no screenshot can show it.
+   A short loop: a block is ticked off fifteen minutes early, and the rest of
+   the day springs upward into the minutes it handed back. That compression
+   is the whole product, and no screenshot can show it.
 
    Deliberately self-contained — no engine, no store. A landing page that can
    break because a data layer changed is a landing page that will.
@@ -111,7 +111,7 @@ export function RibbonDemo() {
         />
 
         {laid.map(({ row, done, base, h, shift, at }, i) => {
-          const running = i === 0 && !closed;
+          const current = i === 0 && !closed;
 
           return (
             <motion.div
@@ -139,7 +139,7 @@ export function RibbonDemo() {
                   top: 1,
                   bottom: 1,
                   background: `color-mix(in oklab, ${row.colour} ${
-                    done ? 10 : running ? 30 : 20
+                    done ? 10 : current ? 28 : 18
                   }%, var(--color-paper))`,
                 }}
               />
@@ -175,7 +175,7 @@ export function RibbonDemo() {
                   <div
                     className="absolute top-0 bottom-0 left-1/2 w-[3px] -translate-x-1/2"
                     style={{
-                      background: running ? "var(--color-accent)" : row.colour,
+                      background: current ? "var(--color-accent)" : row.colour,
                       opacity: done ? 0.3 : 0.9,
                     }}
                   />
@@ -186,7 +186,7 @@ export function RibbonDemo() {
                     style={{
                       background: done ? row.colour : "var(--color-paper)",
                       boxShadow: `inset 0 0 0 1.5px ${
-                        running ? "var(--color-accent)" : row.colour
+                        current ? "var(--color-accent)" : row.colour
                       }`,
                     }}
                   >
@@ -278,7 +278,7 @@ export function RibbonDemo() {
         <span className="relative block h-4 flex-1">
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span
-              key={closed ? "closed" : "running"}
+              key={closed ? "closed" : "drafted"}
               className="absolute inset-0 leading-4"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
@@ -287,7 +287,7 @@ export function RibbonDemo() {
             >
               {closed
                 ? "Finished early — the rest of the day moved up."
-                : "One block running. The plan still holds."}
+                : "The plan as drafted. Nothing has moved yet."}
             </motion.span>
           </AnimatePresence>
         </span>

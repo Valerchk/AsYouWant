@@ -122,17 +122,19 @@ export function seedDay(nowMin: number): Block[] {
     );
   }
 
-  // Running now.
-  const activeStart = nowMin - 25;
-  if (fits(activeStart, 60)) {
+  // The block the clock is inside right now. An anchor, so it stays there:
+  // the seeded day should show what "you are here" looks like, and nothing
+  // produces a running state any more.
+  const currentStart = nowMin - 25;
+  if (fits(currentStart, 60)) {
     blocks.push(
       make({
         title: "Review pull requests",
+        kind: "anchor",
+        startMin: currentStart,
         plannedMin: 60,
-        status: "active",
         sortOrder: 2,
         threadId: "t2",
-        actualStartMin: activeStart,
       }),
     );
   }

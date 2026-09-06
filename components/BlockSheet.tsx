@@ -31,12 +31,9 @@ interface Props {
   block: Block | null;
   threads: Thread[];
   routines: Routine[];
-  /** False on a past day, where starting something makes no sense. */
-  canStart: boolean;
   onClose: () => void;
   onPatch: (id: string, patch: Partial<Block>) => void;
   onDelete: (id: string) => void;
-  onStart: (id: string) => void;
   onCarry: (block: Block) => void;
   /** Making a goal from here keeps the block in view; it is styled on its
       own tab, where a goal is a week rather than an afternoon. */
@@ -60,11 +57,9 @@ function SheetBody({
   block,
   threads,
   routines,
-  canStart,
   onClose,
   onPatch,
   onDelete,
-  onStart,
   onCarry,
   onCreateThread,
   onRepeat,
@@ -118,30 +113,6 @@ function SheetBody({
           <Icon name="close" size={17} />
         </button>
       </div>
-
-      {/* The verb, also here — the ribbon only offers it on the block that
-          owns the current minute, and sometimes you start something else. */}
-      {canStart && block.status === "planned" && (
-        <button
-          type="button"
-          onClick={() => {
-            onStart(block.id);
-            onClose();
-          }}
-          className="mt-4 flex w-full items-center gap-3 rounded-plate bg-accent px-4 py-3 text-left text-paper transition-shadow hover:shadow-lift"
-        >
-          <svg width="11" height="12" viewBox="0 0 9 10" fill="none" aria-hidden>
-            <path
-              d="M1 1v8l7-4z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="miter"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
-          <span className="text-fine">Start it now</span>
-        </button>
-      )}
 
       {/* ---- look ----
 

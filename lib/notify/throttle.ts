@@ -13,6 +13,10 @@
      · never two within GAP_MIN minutes of each other
      · never more than HOURLY_CAP in a rolling hour
 
+   Ten minutes, not five, and that number came from a person holding the phone
+   rather than from a calculation: two buzzes inside ten minutes read as the
+   app losing its composure however reasonable each one was on its own.
+
    Nothing is discarded. A payload held back is simply not recorded as sent,
    so the next tick offers it again and it arrives once the gap has passed —
    late is a fair price, and it is the only honest thing to do with a message
@@ -23,7 +27,7 @@
    ========================================================================== */
 
 /** Minutes that must pass between two audible notifications. */
-export const GAP_MIN = 5;
+export const GAP_MIN = 10;
 
 /** The most audible notifications one hour may contain. */
 export const HOURLY_CAP = 4;

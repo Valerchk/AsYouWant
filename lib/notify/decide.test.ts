@@ -100,21 +100,18 @@ describe("the live card", () => {
     expect(live.silent).toBe(true);
   });
 
-  it("prefers the running block over the merely scheduled one", () => {
-    const running = block({
-      title: "Running",
-      plannedMin: 60,
-      status: "active",
-      actualStartMin: H(9, 30),
-    });
-    const scheduled = anchor(H(10), 60, { title: "Scheduled" });
+  it("reads the schedule, which is the only thing there is to read", () => {
+    // There is no "started" state to prefer any more. Whatever the plan puts
+    // across this minute is the current block, full stop.
+    const earlier = anchor(H(9), 30, { title: "Earlier" });
+    const nowish = anchor(H(10), 60, { title: "Now" });
 
-    const result = layout(([running, scheduled] as Block[]), {
+    const result = layout([earlier, nowish] as Block[], {
       nowMin: H(10, 10),
       dayStartMin: H(8),
       dayEndMin: H(22),
     });
-    expect(currentBlock(result, H(10, 10))?.block.title).toBe("Running");
+    expect(currentBlock(result, H(10, 10))?.block.title).toBe("Now");
   });
 
   it("disappears when nothing owns the moment", () => {
@@ -194,62 +191,9 @@ describe("not spamming the lock screen", () => {
   });
 });
 
-describe("running long", () => {
-  it("escalates in quarter hours rather than every minute", () => {
-    const running = block({
-      plannedMin: 30,
-      status: "active",
-      actualStartMin: H(10),
-    });
-    const bodies = new Set<string>();
-    for (let m = H(10, 30); m < H(11, 30); m += 1) {
-      const out = decide([running], ctx({ nowMin: m }));
-      const over = out.find((n) => n.tag.startsWith("edge-over-"));
-      if (over) bodies.add(over.body);
-    }
-    // An hour of running over is four things to say, not sixty.
-    expect(bodies.size).toBeLessThanOrEqual(4);
-  });
-
-  it("reports the overrun and what it costs", () => {
-    const running = block({
-      title: "Review",
-      plannedMin: 30,
-      sortOrder: 1,
-      status: "active",
-      actualStartMin: H(20),
-    });
-    const squeezed = block({ plannedMin: 60, sortOrder: 2 });
-
-    const out = decide(
-      [running, squeezed],
-      ctx({ nowMin: H(20, 45), dayEndMin: H(21), eveningReviewMin: H(22) }),
-    );
-    const over = out.find((n) => n.tag.startsWith("edge-over-"))!;
-
-    expect(over.title).toBe("Review");
-    expect(over.body).toMatch(/over/);
-    expect(over.body).toMatch(/no longer fit/);
-    expect(over.silent).toBe(false);
-  });
-
-  it("asks for a decision when nothing has been squeezed out yet", () => {
-    const running = block({
-      title: "Review",
-      plannedMin: 30,
-      status: "active",
-      actualStartMin: H(10),
-    });
-    const out = decide([running], ctx({ nowMin: H(10, 45) }));
-    const over = out.find((n) => n.tag.startsWith("edge-over-"))!;
-
-    expect(over.body).toMatch(/cut it here|push the rest/i);
-  });
-});
-
-describe("ending soon", () => {
-  it("speaks once the block is inside its last ten minutes", () => {
-    const out = decide([anchor(H(10), 60)], ctx({ nowMin: H(10, 52) }));
+describe("starting soon", () => {
+  it("speaks in the last ten minutes before something fixed begins", () => {
+    const out = decide([anchor(H(11), 60)], ctx({ nowMin: H(10, 52) }));
     expect(out.some((n) => n.tag.startsWith("edge-soon-"))).toBe(true);
   });
 
@@ -257,25 +201,33 @@ describe("ending soon", () => {
     // The counting version produced a buzz a minute for ten minutes.
     const bodies = new Set<string>();
     for (let m = H(10, 50); m < H(11); m += 1) {
-      const out = decide([anchor(H(10), 60)], ctx({ nowMin: m }));
+      const out = decide([anchor(H(11), 60)], ctx({ nowMin: m }));
       const soon = out.find((n) => n.tag.startsWith("edge-soon-"));
       if (soon) bodies.add(soon.body);
     }
     expect(bodies.size).toBe(1);
   });
 
-  it("stays quiet earlier in the block", () => {
-    const out = decide([anchor(H(10), 60)], ctx({ nowMin: H(10, 20) }));
+  it("names the hour it will begin at", () => {
+    const out = decide([anchor(H(11), 60)], ctx({ nowMin: H(10, 55) }));
+    const soon = out.find((n) => n.tag.startsWith("edge-soon-"))!;
+    expect(soon.body).toContain("11:00");
+    expect(soon.silent).toBe(false);
+  });
+
+  it("stays quiet while the hour is still far off", () => {
+    const out = decide([anchor(H(11), 60)], ctx({ nowMin: H(10, 20) }));
     expect(out.some((n) => n.tag.startsWith("edge-soon-"))).toBe(false);
   });
 
-  it("does not nag about the ending of a block already running long", () => {
-    const running = block({
-      plannedMin: 30,
-      status: "active",
-      actualStartMin: H(10),
-    });
-    const out = decide([running], ctx({ nowMin: H(10, 40) }));
+  it("says nothing about a block with no hour of its own", () => {
+    // A flow block's start is an estimate the ribbon revises whenever
+    // anything above it moves. Warning about a guess is how an app gets
+    // silenced.
+    const out = decide(
+      [block({ plannedMin: 30, sortOrder: 1 })],
+      ctx({ nowMin: H(10) }),
+    );
     expect(out.some((n) => n.tag.startsWith("edge-soon-"))).toBe(false);
   });
 });
@@ -283,7 +235,7 @@ describe("ending soon", () => {
 describe("a missed anchor", () => {
   it("mentions it while it is still worth mentioning", () => {
     const out = decide([anchor(H(10), 30)], ctx({ nowMin: H(10, 45) }));
-    const missed = out.find((n) => n.tag.startsWith("edge-missed-"))!;
+    const missed = out.find((n) => n.tag === "edge-missed")!;
     expect(missed.body).toContain("10:00");
     expect(missed.body).toMatch(/did it happen/i);
   });
@@ -294,14 +246,35 @@ describe("a missed anchor", () => {
     const bodies = new Set<string>();
     for (let m = H(10, 32); m <= H(10, 48); m += 1) {
       const out = decide([anchor(H(10), 30)], ctx({ nowMin: m }));
-      bodies.add(out.find((n) => n.tag.startsWith("edge-missed-"))!.body);
+      bodies.add(out.find((n) => n.tag === "edge-missed")!.body);
     }
     expect(bodies.size).toBe(1);
   });
 
   it("lets it go once the window has passed", () => {
     const out = decide([anchor(H(10), 30)], ctx({ nowMin: H(12) }));
-    expect(out.some((n) => n.tag.startsWith("edge-missed-"))).toBe(false);
+    expect(out.some((n) => n.tag === "edge-missed")).toBe(false);
+  });
+
+  it("gathers several into one card rather than one buzz each", () => {
+    // Three meetings missed over lunch used to be three notifications,
+    // released one per throttle window — so the phone spoke about the past
+    // three times, ten minutes apart.
+    const out = decide(
+      [
+        // All three end inside the twenty-minute window.
+        anchor(H(10, 45), 15, { title: "Standup" }),
+        anchor(H(11), 10, { title: "Review" }),
+        anchor(H(11, 10), 10, { title: "Call" }),
+      ],
+      ctx({ nowMin: H(11, 20) }),
+    );
+
+    const missed = out.filter((n) => n.tag === "edge-missed");
+    expect(missed).toHaveLength(1);
+    expect(missed[0].title).toBe("3 went past unmarked");
+    expect(missed[0].body).toContain("Standup");
+    expect(missed[0].body).toContain("Call");
   });
 });
 

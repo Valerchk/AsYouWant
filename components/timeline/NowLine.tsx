@@ -41,11 +41,16 @@ export function NowLine({ y, nowMin }: { y: number; nowMin: number }) {
           background: "var(--color-accent)",
         }}
       />
+      {/* The clock sits in the gutter the hour scale now rules, so it carries
+          a slip of paper to stand on. Without it "13" and "13:24" print over
+          each other for the two minutes either side of every hour. */}
       <div
-        className="num absolute text-micro leading-none font-medium text-accent"
-        style={{ left: 0, top: -5, width: CLOCK_W - 10, textAlign: "right" }}
+        className="absolute"
+        style={{ left: 0, top: -6, width: CLOCK_W - 8, textAlign: "right" }}
       >
-        {formatClock(nowMin)}
+        <span className="num bg-paper pl-1 text-micro leading-none font-medium text-accent">
+          {formatClock(nowMin)}
+        </span>
       </div>
     </motion.div>
   );

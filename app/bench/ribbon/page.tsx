@@ -11,8 +11,9 @@ import type { Thread } from "@/lib/threads";
 import { newId } from "@/lib/store/local";
 
 /* Ribbon bench. The time scrubber is the point: drag it and the whole day
-   replays — blocks start, overrun, spill into overflow — in seconds rather
-   than in real time. Nothing here talks to a database. */
+   replays — anchors go past unmarked, flow blocks reshuffle, the day spills
+   into overflow — in seconds rather than in real time. Nothing here talks to
+   a database. */
 
 const DAY_START = 8 * 60;
 const DAY_END = 22 * 60;
@@ -109,18 +110,6 @@ export default function RibbonBench() {
     );
   }
 
-  function start(id: string) {
-    setBlocks((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? { ...b, status: "active", actualStartMin: nowMin }
-          : b.status === "active"
-            ? { ...b, status: "planned", actualStartMin: null }
-            : b,
-      ),
-    );
-  }
-
   function add(input: string, draft: ComposerDraft) {
     const { parsed } = parseQuickAdd(input);
     const typed =
@@ -168,8 +157,6 @@ export default function RibbonBench() {
   const setStatus = (id: string, status: Block["status"]) =>
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
 
-  const running = result.running;
-
   return (
     <main className="chrome safe-top safe-bottom mx-auto max-w-2xl px-5 py-10">
       <header className="mb-6">
@@ -210,25 +197,6 @@ export default function RibbonBench() {
               {result.overflow.length}
             </span>
           </span>
-          {running && (
-            <span className="num text-accent">running · {running.block.title}</span>
-          )}
-        </div>
-
-        {/* starting a block is not a ribbon gesture yet — bench-only control */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {result.placed
-            .filter((p) => p.block.status === "planned")
-            .slice(0, 4)
-            .map((p) => (
-              <button
-                key={p.block.id}
-                onClick={() => start(p.block.id)}
-                className="rounded-edge px-2 py-1 text-micro text-faint ring-1 ring-rule transition-colors hover:text-accent hover:ring-accent/40"
-              >
-                start · {p.block.title}
-              </button>
-            ))}
         </div>
       </div>
 
@@ -240,7 +208,6 @@ export default function RibbonBench() {
         dayEndMin={DAY_END}
         isToday
         onToggleDone={toggleDone}
-        onStart={start}
         onOpenBlock={() => {}}
         onReorderBlock={(id, targetMin) => {
           // The bench has no store, so ordering is applied straight to state.

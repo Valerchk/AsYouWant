@@ -18,12 +18,7 @@ import { DaySkeleton } from "@/components/Skeleton";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
-import {
-  closeBlock,
-  pauseBlock,
-  reopenBlock,
-  startBlock,
-} from "@/lib/timeline/actions";
+import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
 import { addDays, formatClock, formatDuration, localDay, weekOf } from "@/lib/time";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { dayStore } from "@/lib/data";
@@ -161,30 +156,6 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     patchBlock(blockId, { status, actualStartMin, actualEndMin });
   }
 
-  /* Begin a block. Whatever was running is put down first with the minutes it
-     genuinely got, so the day's record stays true and only one block is ever
-     running at once. */
-  function start(blockId: string) {
-    const running = result.running;
-    if (running && running.block.id !== blockId) {
-      const paused = pauseBlock(running.block, nowMin);
-      patchBlock(running.block.id, {
-        status: paused.status,
-        actualStartMin: paused.actualStartMin,
-        actualEndMin: paused.actualEndMin,
-      });
-    }
-
-    const block = day?.blocks.find((b) => b.id === blockId);
-    if (!block) return;
-    const started = startBlock(block, nowMin);
-    patchBlock(blockId, {
-      status: started.status,
-      actualStartMin: started.actualStartMin,
-      actualEndMin: started.actualEndMin,
-    });
-  }
-
   /* Tapping open time fills the input instead of creating a block. Silently
      minting an untitled "New block" is how three identical rows ended up on
      the ribbon — and it put them wherever the gap started, which could be
@@ -270,7 +241,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   if (loading || !day) return <DaySkeleton />;
 
   const plannedMin = day.blocks
-    .filter((b) => b.status === "planned" || b.status === "active")
+    .filter((b) => b.status === "planned")
     .reduce((sum, b) => sum + b.plannedMin, 0);
 
   const editing = day.blocks.find((b) => b.id === editingId) ?? null;
@@ -308,6 +279,10 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           blockCount={result.placed.length}
           overflowCount={result.overflow.length}
           intentionCount={intentions}
+          placed={result.placed}
+          threads={day.threads}
+          dayStartMin={day.dayStartMin}
+          dayEndMin={day.dayEndMin}
           confirmed={day.confirmed}
           onConfirm={confirmDay}
           onOpenMenu={() => setMenuOpen(true)}
@@ -326,7 +301,6 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             dayEndMin={day.dayEndMin}
             isToday={isToday}
             onToggleDone={toggleDone}
-            onStart={start}
             onOpenBlock={setEditingId}
             onFillGap={fillGap}
             onMoveBlock={moveBlock}
@@ -372,11 +346,9 @@ function DayScreen({ nowMin }: { nowMin: number }) {
         block={editing}
         threads={day.threads}
         routines={routines}
-        canStart={isToday}
         onClose={() => setEditingId(null)}
         onPatch={patchBlock}
         onDelete={deleteBlock}
-        onStart={start}
         onCarry={(b) => carryTo(b, addDays(date, 1))}
         onCreateThread={addThreadNamed}
         onRepeat={handleRepeat}

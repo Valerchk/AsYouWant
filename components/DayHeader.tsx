@@ -4,7 +4,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { formatClock, formatDuration, daysBetween, weekdayOf } from "@/lib/time";
 import { Icon } from "@/components/icons/Icon";
 import { WeekStrip } from "@/components/WeekStrip";
+import { DayBar } from "@/components/DayBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import type { Thread } from "@/lib/threads";
+import type { PlacedBlock } from "@/lib/timeline/engine";
 
 interface Props {
   /** The day on screen, which is no longer always today. */
@@ -20,6 +23,11 @@ interface Props {
   overflowCount: number;
   /** Things you mean to do today that take no place on the clock. */
   intentionCount: number;
+  /** Everything the day holds, for the bar that draws it to scale. */
+  placed: PlacedBlock[];
+  threads: Thread[];
+  dayStartMin: number;
+  dayEndMin: number;
   confirmed: boolean;
   onConfirm: () => void;
   /** Everything that is not the day itself, behind one button. */
@@ -64,6 +72,10 @@ export function DayHeader({
   blockCount,
   overflowCount,
   intentionCount,
+  placed,
+  threads,
+  dayStartMin,
+  dayEndMin,
   confirmed,
   onConfirm,
   onOpenMenu,
@@ -119,6 +131,19 @@ export function DayHeader({
         </div>
       </div>
 
+      {/* The day at true scale, before any of its numbers. Reading the shape
+          takes no reading at all, which is the point of putting it first. */}
+      <div className="mt-4">
+        <DayBar
+          placed={placed}
+          threads={threads}
+          dayStartMin={dayStartMin}
+          dayEndMin={dayEndMin}
+          nowMin={nowMin}
+          isToday={isToday}
+        />
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-rule pt-2.5 text-micro">
         <span className="num text-ink">
           {blockCount} {blockCount === 1 ? "block" : "blocks"}
@@ -142,22 +167,26 @@ export function DayHeader({
       </div>
 
       {/* The morning ritual. Until the day is agreed to, the app stays quiet:
-          no reminders are sent for a plan nobody signed off on. */}
+          no reminders are sent for a plan nobody signed off on.
+
+          One line, not the slab it used to be. That slab was the loudest
+          thing on the screen every morning — a quarter of a phone spent on a
+          chore, standing between you and the day it was about. */}
       {!confirmed && isToday && (
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="mt-5 flex w-full items-center gap-3 rounded-plate bg-accent-soft px-4 py-3.5 text-left ring-1 ring-accent/25 transition-shadow hover:shadow-lift"
-        >
-          <Icon name="sunrise" size={17} className="shrink-0 text-accent" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-fine text-deep">Confirm the day</span>
-            <span className="block text-micro text-faint">
-              Reminders start once you do
-            </span>
+        <div className="mt-2.5 flex items-center gap-2 border-t border-grid pt-2.5 text-micro">
+          <Icon name="sunrise" size={13} className="shrink-0 text-faint" />
+          <span className="min-w-0 flex-1 truncate text-faint">
+            Reminders stay off until the plan is agreed
           </span>
-          <Icon name="chevron" size={14} className="shrink-0 text-accent" />
-        </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex shrink-0 items-center gap-1 rounded-edge bg-accent-soft px-2.5 py-1 text-micro text-accent ring-1 ring-accent/30 transition-shadow hover:shadow-lift"
+          >
+            Confirm
+            <Icon name="chevron" size={11} />
+          </button>
+        </div>
       )}
     </header>
   );

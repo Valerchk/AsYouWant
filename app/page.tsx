@@ -10,7 +10,7 @@ import { Icon } from "@/components/icons/Icon";
 export const metadata: Metadata = {
   title: "As You Want — a day that reshapes itself",
   description:
-    "Most plans survive two hours. This one bends: finish early and the day pulls up, run long and it tells you what no longer fits.",
+    "Most plans survive two hours. This one bends: finish early and the day pulls up, ask for more hours than a day has and it tells you what no longer fits.",
 };
 
 function Rule() {
@@ -48,9 +48,9 @@ export default function Landing() {
               slides, and the schedule quietly starts lying to you.
             </p>
             <p className="mt-4 max-w-md text-base leading-7 text-faint">
-              This one bends instead. Finish early and the day pulls up. Run
-              long and it says plainly what no longer fits — rather than
-              pretending everything still does.
+              This one bends instead. Tick something off early and the day
+              pulls up. Ask it for more hours than a day has and it says
+              plainly what no longer fits, rather than pretending otherwise.
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-3">
@@ -158,8 +158,9 @@ export default function Landing() {
               and never asks for anything.
             </p>
             <p className="mt-4 text-base leading-7 text-faint">
-              It speaks up only when it matters: a block running long, a meeting
-              that came and went, the day closing.
+              It speaks up out loud only when something is about to begin, a
+              meeting came and went, or the day is closing — and never twice
+              inside ten minutes.
             </p>
           </div>
 

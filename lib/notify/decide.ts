@@ -9,13 +9,12 @@
 
 import type { Layout, PlacedBlock } from "@/lib/timeline/engine";
 import {
-  composeAnchorMissed,
-  composeEndingSoon,
   composeEvening,
   composeLive,
+  composeMissed,
   composeMorning,
-  composeOverrun,
-  ENDING_SOON_MIN,
+  composeStartingSoon,
+  STARTING_SOON_MIN,
   type NotificationPayload,
 } from "./compose";
 
@@ -31,7 +30,7 @@ export interface NotifyContext {
      that has never opened Settings behaves exactly as before. */
   /** The self-updating lock-screen card. */
   notifyLive?: boolean;
-  /** Minutes before a block ends to speak up. 0 disables it. */
+  /** Minutes before something fixed begins to speak up. 0 disables it. */
   notifyLeadMin?: number;
   /** Nothing is sent between these, whatever else is true. */
   quietFromMin?: number | null;
@@ -75,17 +74,16 @@ function gridNow(nowMin: number): number {
 }
 
 /**
- * The block that owns this moment on the schedule — running if one is, else
- * whatever is timetabled across now.
+ * The block the plan puts you in right now.
  *
- * Deliberately not `layout.running` alone: the live card has to survive the
- * person forgetting to tap "start", which is most days.
+ * The schedule is the only source there is. It used to consult a "running"
+ * block first, which existed only when someone had pressed Start — and the
+ * fallback below carried nearly every day anyway.
  */
 export function currentBlock(
   layout: Layout,
   nowMin: number,
 ): PlacedBlock | null {
-  if (layout.running) return layout.running;
   return (
     layout.placed.find(
       (p) =>
@@ -102,7 +100,7 @@ export function decideNotifications(
   threadNames: Map<string, string>,
 ): NotificationPayload[] {
   const { nowMin, dayStartMin, eveningReviewMin, dayConfirmed } = ctx;
-  const leadMin = ctx.notifyLeadMin ?? ENDING_SOON_MIN;
+  const leadMin = ctx.notifyLeadMin ?? STARTING_SOON_MIN;
   const wantsLive = ctx.notifyLive ?? true;
   const needsConfirm = ctx.requireConfirm ?? true;
 
@@ -126,37 +124,38 @@ export function decideNotifications(
   const out: NotificationPayload[] = [];
   const current = currentBlock(layout, nowMin);
 
-  if (current) {
+  if (current && wantsLive) {
     const settled = gridNow(nowMin);
-    const display =
-      current.overrunMin > 0
-        ? Math.max(0, settled - (current.startMin + current.block.plannedMin))
-        : Math.max(0, current.endMin - settled);
-
-    if (wantsLive) {
-      out.push(composeLive(current, layout, nowMin, display));
-    }
-
-    if (current.overrunMin > 0) {
-      out.push(composeOverrun(current, layout));
-    } else if (leadMin > 0) {
-      const left = current.endMin - nowMin;
-      if (left > 0 && left <= leadMin) {
-        out.push(composeEndingSoon(current, layout, leadMin));
-      }
-    }
+    out.push(
+      composeLive(current, layout, nowMin, Math.max(0, current.endMin - settled)),
+    );
   }
 
-  // An anchor that came and went unmarked. Measured from its end, not its
-  // start: while it is still running it belongs to the live card above, and
-  // the useful question only arises once it is over.
-  for (const p of layout.placed) {
-    if (p.block.kind !== "anchor" || !p.isMissed) continue;
-    const since = nowMin - p.endMin;
-    if (since >= 0 && since <= MISSED_WINDOW_MIN) {
-      out.push(composeAnchorMissed(p, layout));
-    }
+  /* Something fixed about to begin. Anchors only: a flow block's start is an
+     estimate the ribbon revises the moment anything above it moves, and a
+     phone that buzzes about a guess is a phone that gets silenced. */
+  if (leadMin > 0) {
+    const soon = layout.placed.find(
+      (p) =>
+        p.block.kind === "anchor" &&
+        p.block.status === "planned" &&
+        p.startMin > nowMin &&
+        p.startMin - nowMin <= leadMin,
+    );
+    if (soon) out.push(composeStartingSoon(soon, layout, leadMin));
   }
+
+  // Anchors that came and went unmarked, gathered into one card. Measured
+  // from the end, not the start: the useful question only arises once the
+  // hour is over.
+  const missed = layout.placed.filter(
+    (p) =>
+      p.block.kind === "anchor" &&
+      p.isMissed &&
+      nowMin - p.endMin >= 0 &&
+      nowMin - p.endMin <= MISSED_WINDOW_MIN,
+  );
+  if (missed.length > 0) out.push(composeMissed(missed, layout));
 
   return out;
 }
