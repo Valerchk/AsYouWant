@@ -108,7 +108,14 @@ export function Ribbon({
 
         {/* The gutter is a ruled scale, drawn once for the whole day rather
             than a time reprinted beside every block. */}
-        <HourScale geo={geo} />
+        <HourScale
+          geo={geo}
+          avoidY={
+            isToday && nowMin >= geo.startMin && nowMin <= geo.endMin
+              ? nowY
+              : null
+          }
+        />
 
         {isToday && nowMin >= geo.startMin && nowMin <= geo.endMin && (
           <NowLine y={nowY} nowMin={nowMin} />

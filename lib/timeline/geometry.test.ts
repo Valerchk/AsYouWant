@@ -118,14 +118,38 @@ describe("segment stacking", () => {
 });
 
 describe("gaps", () => {
-  it("collapses a long empty stretch to a fixed strip", () => {
+  it("collapses a long empty stretch, but not to nothing", () => {
     // 10:00–14:00 is four hours of nothing.
     const { segments } = geoOf([anchor(H(9), 60), anchor(H(14), 60)]);
     const between = gaps(segments).find((g) => g.startMin === H(10));
 
     expect(between).toBeDefined();
     expect(between!.collapsed).toBe(true);
-    expect(between!.height).toBe(COLLAPSED_GAP_H);
+    expect(between!.height).toBeGreaterThanOrEqual(COLLAPSED_GAP_H);
+    // Far shorter than the four hours it stands for, which is the point.
+    expect(between!.height).toBeLessThan(240 * PX_PER_MIN);
+  });
+
+  it("gives a longer empty stretch more room than a shorter one", () => {
+    // Every collapsed gap used to be exactly the same height, so a whole
+    // empty day and a half-hour lull looked identical — and a day with
+    // nothing in it came out forty pixels tall, with the hour scale trying
+    // to rule seventeen hours across them.
+    const short = geoOf([anchor(H(9), 60), anchor(H(11), 60)]);
+    const long = geoOf([anchor(H(9), 60), anchor(H(18), 60)]);
+
+    const a = gaps(short.segments).find((g) => g.startMin === H(10))!;
+    const b = gaps(long.segments).find((g) => g.startMin === H(10))!;
+
+    expect(b.height).toBeGreaterThan(a.height);
+  });
+
+  it("never lets one empty stretch run away with the ribbon", () => {
+    // A day with nothing planned at all is one enormous gap.
+    const { totalHeight } = geoOf([]);
+    expect(totalHeight).toBeLessThanOrEqual(200);
+    // …and still tall enough for the scale beside it to have room.
+    expect(totalHeight).toBeGreaterThan(COLLAPSED_GAP_H * 2);
   });
 
   it("keeps a short gap proportional rather than collapsing it", () => {

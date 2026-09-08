@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Icon, type IconName } from "@/components/icons/Icon";
 import { useNotes } from "@/lib/data/useNotes";
+import { useKeyboardSettle } from "@/lib/useKeyboardSettle";
 
 /* Bottom tabs, in thumb reach.
 
@@ -17,7 +18,12 @@ import { useNotes } from "@/lib/data/useNotes";
 
    Fixed rather than sticky, the same as the composer above it, so the two
    bars are one object as far as the keyboard is concerned. As a sticky
-   element over a fixed footer they could and did come apart. */
+   element over a fixed footer they could and did come apart.
+
+   The keyboard hook lives here because this is the component present on
+   exactly the three screens that have bottom bars, and because it belongs to
+   the bars rather than to any one screen. It never positions anything — see
+   lib/useKeyboardSettle for why that restraint is the point. */
 
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/today", label: "Today", icon: "flow" },
@@ -27,6 +33,9 @@ const TABS: { href: string; label: string; icon: IconName }[] = [
 
 export function TabBar() {
   const pathname = usePathname();
+  // Puts the page down once the keyboard has gone, which is the only thing
+  // that was ever wrong: the bars were fine, the scroll underneath was not.
+  useKeyboardSettle();
   // Reads from the same store as the inbox screen, so the badge is right
   // whichever tab you are on.
   const { notes } = useNotes();

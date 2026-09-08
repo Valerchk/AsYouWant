@@ -23,6 +23,8 @@ import { CLOCK_W } from "./motion";
 const LABEL_CLEARANCE = 30;
 /** Pixels a bare tick needs, which is far less. */
 const TICK_CLEARANCE = 7;
+/** How much room the now-line's own clock is given to itself. */
+const NOW_CLEARANCE = 16;
 
 interface Mark {
   y: number;
@@ -30,7 +32,7 @@ interface Mark {
   label: string | null;
 }
 
-function buildMarks(geo: Geometry): Mark[] {
+function buildMarks(geo: Geometry, avoidY: number | null): Mark[] {
   const out: Mark[] = [];
   let lastLabelY = -Infinity;
   let lastTickY = -Infinity;
@@ -46,8 +48,14 @@ function buildMarks(geo: Geometry): Mark[] {
     // A label only where one will not collide with the last one printed.
     // Inside a folded stretch that means hours pass with a tick and no
     // number, which is the truthful reading: the ribbon is not showing them.
+    /* The now-line prints its own clock in this gutter, and it always wins:
+       "22" and "22:41" one on top of the other is the worst possible reading
+       of a scale whose whole job is to be unambiguous. */
+    const clashesWithNow =
+      avoidY !== null && Math.abs(y - avoidY) < NOW_CLEARANCE;
+
     const label =
-      hour && y - lastLabelY >= LABEL_CLEARANCE
+      hour && !clashesWithNow && y - lastLabelY >= LABEL_CLEARANCE
         ? String(Math.floor(min / 60) % 24).padStart(2, "0")
         : null;
     if (label) lastLabelY = y;
@@ -57,14 +65,21 @@ function buildMarks(geo: Geometry): Mark[] {
   return out;
 }
 
-export function HourScale({ geo }: { geo: Geometry }) {
+export function HourScale({
+  geo,
+  avoidY = null,
+}: {
+  geo: Geometry;
+  /** Where the now-line sits, so no hour label is drawn under its clock. */
+  avoidY?: number | null;
+}) {
   return (
     <div
       className="pointer-events-none absolute top-0 bottom-0 left-0 select-none"
       style={{ width: CLOCK_W }}
       aria-hidden
     >
-      {buildMarks(geo).map((m, i) => (
+      {buildMarks(geo, avoidY).map((m, i) => (
         <div key={i} className="absolute right-0" style={{ top: m.y }}>
           <span
             className="absolute right-1 block h-px -translate-y-1/2"

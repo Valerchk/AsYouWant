@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { Icon } from "@/components/icons/Icon";
+import { Icon, type IconName } from "@/components/icons/Icon";
 import { SendButton } from "@/components/SendButton";
 import { LoadFailure } from "@/components/LoadFailure";
 import { ListSkeleton } from "@/components/Skeleton";
@@ -167,45 +167,46 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
           )}
         </header>
 
-        <div className="mt-7 px-6">
+        <div className="mt-8 space-y-9 px-6">
           <Section
             label="Today"
             hint="What you mean to do, with no hour attached."
             count={intentions.length}
-          />
-          {intentions.length === 0 ? (
-            <Empty>
-              Nothing set for today. Write one below — it takes no place on the
-              clock until you give it one.
-            </Empty>
-          ) : (
-            <ul>
-              <AnimatePresence initial={false}>
-                {intentions.map((note) => (
-                  <NoteRow
-                    key={note.id}
-                    {...rowProps(note)}
-                    onMove={() => setPlannedFor(note.id, null)}
-                    moveLabel="Someday"
-                  />
-                ))}
-              </AnimatePresence>
-            </ul>
-          )}
+          >
+            {intentions.length === 0 ? (
+              <Empty>
+                Nothing set for today. Write one below — it takes no place on
+                the clock until you give it one.
+              </Empty>
+            ) : (
+              <ul className="space-y-2.5">
+                <AnimatePresence initial={false}>
+                  {intentions.map((note) => (
+                    <NoteRow
+                      key={note.id}
+                      {...rowProps(note)}
+                      onMove={() => setPlannedFor(note.id, null)}
+                      moveLabel="Someday"
+                      moveIcon="moon"
+                    />
+                  ))}
+                </AnimatePresence>
+              </ul>
+            )}
+          </Section>
 
-          <div className="mt-9">
-            <Section
-              label="Someday"
-              hint="Caught, but not for today."
-              count={someday.length}
-            />
+          <Section
+            label="Someday"
+            hint="Caught, but not for today."
+            count={someday.length}
+          >
             {someday.length === 0 ? (
               <Empty>
                 Anything you catch without choosing a day lands here, and waits
                 without asking anything of you.
               </Empty>
             ) : (
-              <ul>
+              <ul className="space-y-2.5">
                 <AnimatePresence initial={false}>
                   {someday.map((note) => (
                     <NoteRow
@@ -213,12 +214,13 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
                       {...rowProps(note)}
                       onMove={() => setPlannedFor(note.id, today)}
                       moveLabel="Today"
+                      moveIcon="sunrise"
                     />
                   ))}
                 </AnimatePresence>
               </ul>
             )}
-          </div>
+          </Section>
         </div>
       </main>
 
@@ -268,29 +270,43 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="pb-2 text-fine leading-6 text-faint">{children}</p>
+    <p className="rounded-plate border border-dashed border-grid px-3.5 py-4 text-fine leading-6 text-faint">
+      {children}
+    </p>
   );
 }
 
+/* The heading is deliberately the quietest thing in its own section. It used
+   to carry a hint under it at all times, in the same size and colour as the
+   note beneath — so the label, the explanation and the thought itself were
+   three greys of equal weight and the only one that mattered came third. The
+   hint now appears only where there is nothing to explain it away. */
 function Section({
   label,
   hint,
   count,
+  children,
 }: {
   label: string;
   hint: string;
   count: number;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 border-b border-rule pb-2">
-      <div className="flex items-baseline gap-2.5">
+    <section>
+      <div className="mb-3 flex items-baseline gap-2.5">
         <h2 className="text-micro tracking-[0.18em] text-faint uppercase">
           {label}
         </h2>
-        <span className="num text-micro text-faint">{count}</span>
+        <span className="num text-micro text-faint/70">{count}</span>
+        {count === 0 && (
+          <span className="min-w-0 flex-1 truncate text-micro text-faint/70">
+            {hint}
+          </span>
+        )}
       </div>
-      <p className="mt-1 text-micro text-faint">{hint}</p>
-    </div>
+      {children}
+    </section>
   );
 }
 
@@ -319,12 +335,31 @@ function Toggle({
   );
 }
 
+/* ==========================================================================
+   One caught thought.
+   --------------------------------------------------------------------------
+   A card, and the thought is the only thing in its top line.
+
+   It used to be a row: a marker, then the text, then three controls, all on
+   one line — which left the words about a hundred and fifty pixels on a phone.
+   "Приготовить вафельный торт" wrapped to two cramped lines and then sat at
+   the same size and weight as the section heading above it, the hint under
+   that, the timestamp below and the buttons beside. Six greys, and the one
+   piece of content among them was indistinguishable from its own furniture.
+
+   So the words get the full width and the largest type on the screen, and
+   everything that acts on them moves to a quiet line underneath — named,
+   because a clock glyph does not say "give this an hour" to anyone who has
+   not already been told.
+   ========================================================================== */
+
 function NoteRow({
   note,
   promoted,
   onSchedule,
   onMove,
   moveLabel,
+  moveIcon,
   onDelete,
   onEdit,
   onToggle,
@@ -334,6 +369,7 @@ function NoteRow({
   onSchedule: () => void;
   onMove: () => void;
   moveLabel: string;
+  moveIcon: IconName;
   onDelete: () => void;
   onEdit: (text: string) => void;
   onToggle: () => void;
@@ -355,104 +391,139 @@ function NoteRow({
         transition: { duration: 0.22 },
       }}
       transition={{ type: "spring", stiffness: 420, damping: 34 }}
-      className="flex items-start gap-3 border-b border-grid py-3.5"
     >
-      {/* The same marker the ribbon uses, so a thing you mean to do looks the
-          same whether or not it has an hour. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={done}
-        aria-label={done ? `Reopen ${note.text}` : `Finish ${note.text}`}
-        className="-m-2 flex shrink-0 items-center justify-center p-2"
+      <div
+        className={`rounded-plate px-3.5 py-3 ring-1 transition-colors ${
+          done ? "ring-grid" : "bg-sunk ring-grid"
+        }`}
       >
-        <motion.span
-          className="flex h-[18px] w-[18px] items-center justify-center rounded-plate"
-          animate={{ scale: done ? 1 : 0.92 }}
-          whileTap={{ scale: 0.82 }}
-          transition={{ type: "spring", stiffness: 500, damping: 24 }}
-          style={{
-            background: done ? "var(--color-accent)" : "var(--color-paper)",
-            boxShadow: `inset 0 0 0 1.5px ${
-              done ? "var(--color-accent)" : "var(--color-rule)"
-            }`,
-          }}
-        >
-          {done && <Icon name="check" size={11} className="text-paper" />}
-        </motion.span>
-      </button>
-
-      <div className="min-w-0 flex-1">
-        {/* Tap the words to change them. A thought you cannot correct is a
-            thought you delete and retype. */}
-        {editing ? (
-          <textarea
-            defaultValue={note.text}
-            autoFocus
-            rows={Math.max(1, note.text.split("\n").length)}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              if (next && next !== note.text) onEdit(next);
-              setEditing(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setEditing(false);
-            }}
-            aria-label="Edit this note"
-            className="block w-full resize-none rounded-edge bg-sunk px-2 py-1 text-base leading-6 text-deep ring-1 ring-accent/40 outline-none"
-          />
-        ) : (
-          <p
-            onClick={() => setEditing(true)}
-            className={`cursor-text text-base leading-6 whitespace-pre-wrap ${
-              done ? "text-faint line-through decoration-faint" : "text-ink"
-            }`}
+        <div className="flex items-start gap-3">
+          {/* The same marker the ribbon uses, so a thing you mean to do looks
+              the same whether or not it has an hour. */}
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-pressed={done}
+            aria-label={done ? `Reopen ${note.text}` : `Finish ${note.text}`}
+            className="-m-1.5 flex shrink-0 items-center justify-center p-1.5"
           >
-            {note.text}
-          </p>
-        )}
-        <div className="mt-1 flex items-center gap-2.5 text-micro text-faint">
-          <span className="num">{relativeTime(note.createdAt)}</span>
+            <motion.span
+              className="flex h-[18px] w-[18px] items-center justify-center rounded-plate"
+              animate={{ scale: done ? 1 : 0.92 }}
+              whileTap={{ scale: 0.82 }}
+              transition={{ type: "spring", stiffness: 500, damping: 24 }}
+              style={{
+                background: done ? "var(--color-accent)" : "var(--color-paper)",
+                boxShadow: `inset 0 0 0 1.5px ${
+                  done ? "var(--color-accent)" : "var(--color-rule)"
+                }`,
+              }}
+            >
+              {done && <Icon name="check" size={11} className="text-paper" />}
+            </motion.span>
+          </button>
+
+          {/* Tap the words to change them. A thought you cannot correct is a
+              thought you delete and retype. The textarea is the same type and
+              leading as the paragraph, so nothing jumps on the way in. */}
+          {editing ? (
+            <textarea
+              defaultValue={note.text}
+              autoFocus
+              rows={Math.max(1, note.text.split("\n").length)}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                if (next && next !== note.text) onEdit(next);
+                setEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditing(false);
+              }}
+              aria-label="Edit this note"
+              className="-my-0.5 block min-w-0 flex-1 resize-none rounded-edge bg-paper px-2 py-0.5 text-lede leading-6 text-deep ring-1 ring-accent/40 outline-none"
+            />
+          ) : (
+            <p
+              onClick={() => setEditing(true)}
+              className={`min-w-0 flex-1 cursor-text text-lede leading-6 whitespace-pre-wrap ${
+                done
+                  ? "text-faint line-through decoration-faint/60"
+                  : "text-deep"
+              }`}
+            >
+              {note.text}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-2.5 flex items-center gap-2.5 border-t border-grid pt-2.5">
+          <span className="num shrink-0 text-micro text-faint">
+            {relativeTime(note.createdAt)}
+          </span>
           {hasDetail && !done && (
-            <span className="num text-accent">
+            <span className="num shrink-0 text-micro text-accent">
               {parsed.startMin !== null && `${formatClock(parsed.startMin)} · `}
               {formatDuration(parsed.plannedMin)}
             </span>
           )}
+
+          {/* A finished thought needs no verbs but "undo" and "remove". */}
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {!done && (
+              <>
+                <Act icon="clock" onClick={onSchedule} accent>
+                  Plan
+                </Act>
+                <Act icon={moveIcon} onClick={onMove}>
+                  {moveLabel}
+                </Act>
+              </>
+            )}
+            <Act
+              icon="close"
+              onClick={onDelete}
+              label={`Delete "${note.text}"`}
+              danger
+            />
+          </div>
         </div>
       </div>
-
-      {/* A finished thought needs no verbs but "undo" and "remove". */}
-      {!done && (
-        <>
-          <button
-            type="button"
-            onClick={onMove}
-            className="h-9 shrink-0 rounded-edge px-2 text-micro text-faint transition-colors hover:bg-sunk hover:text-ink"
-          >
-            {moveLabel}
-          </button>
-
-          <button
-            type="button"
-            onClick={onSchedule}
-            aria-label={`Give "${note.text}" a time`}
-            title="Give it a time"
-            className="flex h-9 shrink-0 items-center gap-1 rounded-edge px-2 text-micro text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent-soft"
-          >
-            <Icon name="clock" size={13} />
-          </button>
-        </>
-      )}
-
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label={`Delete "${note.text}"`}
-        className="flex h-9 w-7 shrink-0 items-center justify-center text-faint transition-colors hover:text-over"
-      >
-        <Icon name="close" size={15} />
-      </button>
     </motion.li>
+  );
+}
+
+/** One verb under a note, named rather than left as a glyph to decode. */
+function Act({
+  icon,
+  onClick,
+  children,
+  label,
+  accent = false,
+  danger = false,
+}: {
+  icon: IconName;
+  onClick: () => void;
+  children?: React.ReactNode;
+  label?: string;
+  accent?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label ?? undefined}
+      title={label ?? undefined}
+      className={`flex h-7 items-center gap-1 rounded-edge px-2 text-micro transition-colors ${
+        accent
+          ? "text-accent ring-1 ring-accent/30 hover:bg-accent-soft"
+          : danger
+            ? "text-faint hover:text-over"
+            : "text-faint ring-1 ring-rule hover:bg-sunk hover:text-ink"
+      }`}
+    >
+      <Icon name={icon} size={13} className="shrink-0" />
+      {children}
+    </button>
   );
 }

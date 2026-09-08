@@ -47,6 +47,18 @@ export const COLLAPSED_GAP_H = SCALE.comfortable.collapsedGapH;
 /** Empty stretches longer than this collapse to a labelled strip. */
 export const GAP_COLLAPSE_FROM_MIN = 25;
 export const MIN_GAP_H = 6;
+
+/* A collapsed gap used to be one fixed height whatever it stood for, so half
+   an hour of breathing room and seventeen empty hours were the same forty
+   pixels. On a day with nothing planned that made the entire ribbon forty
+   pixels tall — and the hour scale beside it then tried to rule 07:00 to
+   23:59 across them, which is where the labels started landing on each other.
+
+   So it grows, but by doublings rather than by minutes: four hours is
+   visibly longer than one, a whole empty day is longer again, and none of
+   them costs the screen what drawing them to scale would. */
+const COLLAPSED_GAP_GROWTH_PX = 26;
+const MAX_COLLAPSED_GAP_H = 168;
 /** The single row that stands in for everything already over. */
 export const PAST_STRIP_H = 44;
 
@@ -118,7 +130,16 @@ function gapHeight(
   scale: Scale,
 ): { height: number; collapsed: boolean } {
   if (minutes >= GAP_COLLAPSE_FROM_MIN) {
-    return { height: scale.collapsedGapH, collapsed: true };
+    const doublings = Math.log2(minutes / GAP_COLLAPSE_FROM_MIN);
+    return {
+      height: Math.round(
+        Math.min(
+          MAX_COLLAPSED_GAP_H,
+          scale.collapsedGapH + doublings * COLLAPSED_GAP_GROWTH_PX,
+        ),
+      ),
+      collapsed: true,
+    };
   }
   return {
     height: Math.max(MIN_GAP_H, Math.round(minutes * scale.pxPerMin)),
