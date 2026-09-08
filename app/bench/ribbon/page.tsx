@@ -207,6 +207,8 @@ export default function RibbonBench() {
         dayStartMin={DAY_START}
         dayEndMin={DAY_END}
         isToday
+        density="comfortable"
+        foldPast
         onToggleDone={toggleDone}
         onOpenBlock={() => {}}
         onReorderBlock={(id, targetMin) => {

@@ -118,6 +118,13 @@ export function BlockRow({
 
   const panelLeft = CLOCK_W + RAIL_W;
 
+  /* Nineteen pixels looked handsome and fitted about seventeen Cyrillic
+     characters in the column the card actually has — so "Приготовить курицу",
+     two ordinary words, arrived with an ellipsis. Sixteen buys roughly a
+     fifth more, and a block with room for a second line gets one rather than
+     truncating at all. */
+  const roomForTwoLines = height >= 84;
+
   return (
     <motion.div
       // `top` is real CSS, not an animated transform. Carrying the position
@@ -161,7 +168,12 @@ export function BlockRow({
           className="pointer-events-none absolute rounded-l-edge"
           style={{
             left: panelLeft,
-            width: 3,
+            // Five, not three. Measured, the fills sit only 1.2–1.4:1 from
+            // paper — legible by design, since text on them stays above 7:1,
+            // but that leaves the spine carrying almost all of the colour
+            // identity. Widening the part that costs no legibility is the
+            // cheap half of that trade; deepening the fill is not.
+            width: 5,
             top: 1,
             bottom: 1,
             background: colour,
@@ -243,8 +255,14 @@ export function BlockRow({
           )}
 
           <div
-            className={`pointer-events-none relative truncate text-lede leading-6 ${
-              done ? "text-faint line-through decoration-faint/50" : external ? "text-faint" : "text-deep"
+            className={`pointer-events-none relative text-base leading-5 ${
+              roomForTwoLines ? "line-clamp-2" : "truncate"
+            } ${
+              done
+                ? "text-faint line-through decoration-faint/50"
+                : external
+                  ? "text-faint"
+                  : "text-deep"
             }`}
           >
             {block.title}

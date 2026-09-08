@@ -60,7 +60,7 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
     setText,
     setDone,
   } = useNotes();
-  const { addBlock } = useDay(today, nowMin);
+  const { addBlockWithThread } = useDay(today, nowMin);
 
   const [draft, setDraft] = useState("");
   const [footerRef, footerH] = useMeasuredHeight<HTMLElement>();
@@ -100,16 +100,20 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
      parser as the day's input, so "gym 45m 7pm" arrives as a real block. */
   function schedule(note: NoteData) {
     const { parsed } = parseQuickAdd(note.text);
-    addBlock({
+    const block = {
       title: parsed.title || note.text,
       kind: parsed.kind,
       startMin: parsed.startMin,
       plannedMin: parsed.plannedMin,
-      status: "planned",
+      status: "planned" as const,
       threadId: null,
       actualStartMin: null,
       actualEndMin: null,
-    });
+    };
+    /* The parser reads a #tag out of the note and this used to throw it away,
+       so "gym #health" arrived on the day belonging to nothing — the one
+       piece of intent the thought actually carried, dropped in transit. */
+    addBlockWithThread(block, parsed.threadName);
     setPromoted(note.id);
     remove(note.id);
     setTimeout(() => router.push("/today"), 260);
@@ -220,7 +224,7 @@ function InboxScreen({ nowMin }: { nowMin: number }) {
 
       <footer
         ref={footerRef}
-        className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm"
+        className="above-tabs border-t border-rule bg-paper"
       >
         <div className="mx-auto max-w-2xl px-6 pt-3.5">
           <Notice message={problem} onDismiss={clearProblem} />

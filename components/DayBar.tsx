@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { formatClock } from "@/lib/time";
+import { formatClock, formatDuration } from "@/lib/time";
 import { blockLook, lookColor } from "@/lib/blocks/look";
 import { threadById, type Thread } from "@/lib/threads";
 import type { PlacedBlock } from "@/lib/timeline/engine";
@@ -33,6 +33,10 @@ interface Props {
   nowMin: number;
   /** False on any day but today: there is no "now" on Thursday. */
   isToday: boolean;
+  /** Minutes that are owed but have nowhere left to go. */
+  overflowMin: number;
+  /** Thinner, and without its clock ends — for the collapsed header. */
+  compact?: boolean;
 }
 
 /** Bands thinner than this vanish; a fifteen-minute block must still show. */
@@ -45,6 +49,8 @@ export function DayBar({
   dayEndMin,
   nowMin,
   isToday,
+  overflowMin,
+  compact = false,
 }: Props) {
   // The same widening the ribbon does: a block outside the planned day is
   // still part of the day, and a bar that cropped it would be lying.
@@ -58,7 +64,11 @@ export function DayBar({
 
   return (
     <div className="select-none">
-      <div className="relative h-3.5 overflow-hidden rounded-edge bg-sunk">
+      <div
+        className={`relative overflow-hidden rounded-edge bg-sunk ${
+          compact ? "h-2" : "h-3.5"
+        }`}
+      >
         {/* Everything already gone, laid under the bands rather than over
             them: the past is context, not a curtain. */}
         {showNow && (
@@ -100,6 +110,25 @@ export function DayBar({
           );
         })}
 
+        {/* What will not fit, drawn at the end of the day where it would have
+            to go if the day were longer. Hatched, because these are not
+            minutes you have — they are minutes you are short.
+
+            This is the whole of the capacity signal, and it belongs here: you
+            could previously pour eighteen hours into a fourteen-hour day and
+            find out only by scrolling to a tray at the very bottom. */}
+        {overflowMin > 0 && (
+          <div
+            className="absolute inset-y-0 right-0"
+            style={{
+              width: `${Math.min(55, (overflowMin / span) * 100)}%`,
+              backgroundImage:
+                "repeating-linear-gradient(135deg, var(--color-over) 0 2px, transparent 2px 5px)",
+              boxShadow: "inset 0 0 0 1px var(--color-over)",
+            }}
+          />
+        )}
+
         {/* Now. Drawn last so nothing can cover it, and in paper as well as
             accent so it reads against a band of any colour. */}
         {showNow && (
@@ -117,10 +146,18 @@ export function DayBar({
         )}
       </div>
 
-      <div className="num mt-1.5 flex justify-between text-micro leading-none text-faint">
-        <span>{formatClock(from)}</span>
-        <span>{formatClock(to)}</span>
+      {!compact && (
+      <div className="num mt-1.5 flex justify-between text-micro leading-none">
+        <span className="text-faint">{formatClock(from)}</span>
+        {overflowMin > 0 ? (
+          <span className="text-over">
+            {formatDuration(overflowMin)} past the end
+          </span>
+        ) : (
+          <span className="text-faint">{formatClock(to)}</span>
+        )}
       </div>
+      )}
     </div>
   );
 }

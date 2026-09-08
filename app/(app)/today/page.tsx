@@ -8,7 +8,9 @@ import {
   type ComposerHandle,
 } from "@/components/Composer";
 import { DayHeader } from "@/components/DayHeader";
+import { DayCap } from "@/components/DayCap";
 import { DayMenu } from "@/components/DayMenu";
+import { EveningTurn } from "@/components/EveningTurn";
 import { InstallGate } from "@/components/InstallGate";
 import { BlockSheet } from "@/components/BlockSheet";
 import { TemplateSheet } from "@/components/TemplateSheet";
@@ -16,10 +18,18 @@ import { LoadFailure } from "@/components/LoadFailure";
 import { Notice } from "@/components/Notice";
 import { DaySkeleton } from "@/components/Skeleton";
 import { useMeasuredHeight } from "@/lib/useMeasuredHeight";
+import { useScrolledPast } from "@/lib/useScrolledPast";
 import { parseQuickAdd } from "@/lib/parse/quickAdd";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { closeBlock, reopenBlock } from "@/lib/timeline/actions";
-import { addDays, formatClock, formatDuration, localDay, weekOf } from "@/lib/time";
+import {
+  addDays,
+  dayTitle,
+  formatClock,
+  formatDuration,
+  localDay,
+  weekOf,
+} from "@/lib/time";
 import { useNowMin, CLOCK_NOT_READY } from "@/lib/useNow";
 import { dayStore } from "@/lib/data";
 import { useDay } from "@/lib/data/useDay";
@@ -68,6 +78,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
 
   const { events } = useCalendar(date);
   const [footerRef, footerH] = useMeasuredHeight<HTMLElement>();
+  const [headerEndRef, headerGone] = useScrolledPast<HTMLDivElement>();
   const composer = useRef<ComposerHandle>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,6 +94,19 @@ function DayScreen({ nowMin }: { nowMin: number }) {
   const [weekCounts, setWeekCounts] = useState<Map<string, number>>(new Map());
   const visibleWeek = useMemo(() => weekOf(date), [date]);
   const weekKey = visibleWeek[0];
+
+  /* Arriving from a goal that is behind: "?goal=<id>" opens the composer with
+     that goal already chosen. Read from the address bar rather than through
+     useSearchParams so the page needs no Suspense boundary for a value it
+     looks at exactly once. */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("goal");
+    if (!id) return;
+    const t = setTimeout(() => composer.current?.useGoal(id), 60);
+    // Leave the address clean, so a reload does not re-arm it.
+    window.history.replaceState(null, "", window.location.pathname);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     dayStore()
@@ -240,6 +264,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
 
   if (loading || !day) return <DaySkeleton />;
 
+  const openBlocks = day.blocks.filter((b) => b.status === "planned");
   const plannedMin = day.blocks
     .filter((b) => b.status === "planned")
     .reduce((sum, b) => sum + b.plannedMin, 0);
@@ -260,8 +285,23 @@ function DayScreen({ nowMin }: { nowMin: number }) {
     ).length,
   );
 
+  const overflowMin = result.overflow.reduce((sum, b) => sum + b.plannedMin, 0);
+
   return (
     <>
+      <DayCap
+        show={headerGone}
+        title={dayTitle(date, today)}
+        nowMin={nowMin}
+        isToday={isToday}
+        freeMin={result.freeMin}
+        placed={result.placed}
+        threads={day.threads}
+        dayStartMin={day.dayStartMin}
+        dayEndMin={day.dayEndMin}
+        overflowMin={overflowMin}
+      />
+
       <main
         className="chrome mx-auto max-w-2xl"
         // Falls back until the footer has been measured, so the first
@@ -278,6 +318,7 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           freeMin={result.freeMin}
           blockCount={result.placed.length}
           overflowCount={result.overflow.length}
+          overflowMin={overflowMin}
           intentionCount={intentions}
           placed={result.placed}
           threads={day.threads}
@@ -287,6 +328,10 @@ function DayScreen({ nowMin }: { nowMin: number }) {
           onConfirm={confirmDay}
           onOpenMenu={() => setMenuOpen(true)}
         />
+
+        {/* Where the header ends. Once this passes the top edge the compact
+            cap takes over — see DayCap. */}
+        <div ref={headerEndRef} aria-hidden />
 
         <div className="mt-5 px-6">
           <InstallGate />
@@ -300,6 +345,8 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             dayStartMin={day.dayStartMin}
             dayEndMin={day.dayEndMin}
             isToday={isToday}
+            density={day.density}
+            foldPast={day.collapsePast}
             onToggleDone={toggleDone}
             onOpenBlock={setEditingId}
             onFillGap={fillGap}
@@ -308,13 +355,24 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             onPushToTomorrow={carry}
             onDrop={(id) => patchBlock(id, { status: "dropped" })}
           />
+
+          {/* Once the day is closing, the empty stretch under a spent ribbon
+              stops being wasted space and becomes the one thing worth doing
+              at that hour. */}
+          {isToday && nowMin >= day.eveningReviewMin && (
+            <EveningTurn
+              openCount={openBlocks.length}
+              openMin={openBlocks.reduce((sum, b) => sum + b.plannedMin, 0)}
+              onPlanTomorrow={() => setDate(addDays(today, 1))}
+            />
+          )}
         </div>
       </main>
 
       {/* Pinned within thumb reach, directly above the tabs. */}
       <footer
         ref={footerRef}
-        className="above-tabs border-t border-rule bg-paper/92 backdrop-blur-sm"
+        className="above-tabs border-t border-rule bg-paper"
       >
         <div className="mx-auto max-w-2xl px-6 py-3.5">
           {/* Inside the footer, so the page's bottom padding — which is
@@ -324,6 +382,8 @@ function DayScreen({ nowMin }: { nowMin: number }) {
             ref={composer}
             threads={day.threads}
             nowMin={nowMin}
+            dayLabel={isToday ? null : dayTitle(date, today)}
+            planned={result.placed.length > 0}
             onSubmit={handleAdd}
           />
         </div>

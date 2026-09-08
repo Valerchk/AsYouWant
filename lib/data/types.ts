@@ -1,4 +1,5 @@
 import type { Block } from "@/lib/timeline/engine";
+import type { RibbonDensity } from "@/lib/timeline/geometry";
 import type { Thread } from "@/lib/threads";
 import type { Routine, RoutineInput } from "@/lib/routines";
 
@@ -19,6 +20,13 @@ export interface DayData {
   confirmed: boolean;
   dayStartMin: number;
   dayEndMin: number;
+  /* Two preferences that reach the ribbon. They were stored and shown in
+     Settings but read by nothing, so both switches were decorative. */
+  density: RibbonDensity;
+  /** Open on now rather than on the morning. */
+  collapsePast: boolean;
+  /** When the day starts closing, and Today turns towards tomorrow. */
+  eveningReviewMin: number;
 }
 
 /** A block before the store has given it an id and a position. */

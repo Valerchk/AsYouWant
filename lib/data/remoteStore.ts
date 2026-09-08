@@ -168,6 +168,9 @@ export function createRemoteDayStore(): DayStore {
         confirmed: profile?.day_confirmed_on === day,
         dayStartMin: profile?.day_start_min ?? 8 * 60,
         dayEndMin: profile?.day_end_min ?? 22 * 60,
+        density: profile?.ribbon_density ?? "comfortable",
+        collapsePast: profile?.collapse_past ?? true,
+        eveningReviewMin: profile?.evening_review_min ?? 21 * 60,
       };
     },
 

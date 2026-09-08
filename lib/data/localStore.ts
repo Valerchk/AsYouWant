@@ -107,6 +107,10 @@ export function createLocalDayStore(): DayStore {
         confirmed: stored.confirmed,
         dayStartMin: bounds.start,
         dayEndMin: bounds.end,
+        // Preferences live with the account; without one, the defaults.
+        density: "comfortable",
+        collapsePast: true,
+        eveningReviewMin: 21 * 60,
       };
     },
 

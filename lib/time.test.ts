@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { addDays, daysBetween, weekdayOf, weekOf, formatClock } from "./time";
+import {
+  addDays,
+  dayTitle,
+  daysBetween,
+  formatClock,
+  longDate,
+  weekdayOf,
+  weekOf,
+} from "./time";
 
 describe("moving between days", () => {
   it("rolls over months and years", () => {
@@ -53,5 +61,23 @@ describe("formatClock", () => {
   it("pads so columns line up", () => {
     expect(formatClock(545)).toBe("09:05");
     expect(formatClock(0)).toBe("00:00");
+  });
+});
+
+describe("naming a day", () => {
+  it("prefers a word to a date where there is one", () => {
+    expect(dayTitle("2026-09-08", "2026-09-08")).toBe("Today");
+    expect(dayTitle("2026-09-09", "2026-09-08")).toBe("Tomorrow");
+    expect(dayTitle("2026-09-07", "2026-09-08")).toBe("Yesterday");
+  });
+
+  it("spells out anything further off", () => {
+    expect(dayTitle("2026-09-11", "2026-09-08")).toBe("Fri 11 Sep");
+    expect(dayTitle("2026-01-01", "2026-09-08")).toBe("Thu 1 Jan");
+  });
+
+  it("spells a date the same way wherever it is written", () => {
+    // The composer and the header used to hold separate month tables.
+    expect(longDate("2026-12-25")).toBe("Fri 25 Dec");
   });
 });

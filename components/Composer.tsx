@@ -63,16 +63,22 @@ export interface ComposerDraft extends Look {
 export interface ComposerHandle {
   /** Drop text into the field and put the cursor after it. */
   prefill: (text: string) => void;
+  /** Arrive with a goal already chosen — see the Goals tab. */
+  useGoal: (threadId: string) => void;
 }
 
 interface Props {
   threads: Thread[];
   nowMin: number;
+  /** Names the day when it is not today, so a block never lands by surprise. */
+  dayLabel?: string | null;
+  /** True once the day holds something. */
+  planned?: boolean;
   onSubmit: (input: string, draft: ComposerDraft) => void;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { threads, nowMin, onSubmit },
+  { threads, nowMin, dayLabel = null, planned = false, onSubmit },
   ref,
 ) {
   const [value, setValue] = useState("");
@@ -95,6 +101,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       requestAnimationFrame(() => {
         el.setSelectionRange(text.length, text.length);
       });
+    },
+    useGoal(threadId: string) {
+      setThreadId(threadId);
+      inputRef.current?.focus();
     },
   }));
 
@@ -317,10 +327,18 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          // Reads as a sentence and happens to be the syntax: the chips below
-          // do the same job, so nobody has to learn it, but it stays visible
-          // for anyone who would rather type than tap.
-          placeholder="Lake walk 45m at 18:00"
+          /* The syntax while the day is still empty — which is exactly when
+             it helps — and a short prompt once you are mid-plan. It used to
+             read "Lake walk 45m at 18:00" forever, which is furniture in the
+             most-looked-at pixels of the app. On any day but today it names
+             the day instead, so nothing lands by surprise. */
+          placeholder={
+            dayLabel
+              ? `Add to ${dayLabel}`
+              : planned
+                ? "Add to the day"
+                : "Lake walk 45m at 18:00"
+          }
           autoCapitalize="sentences"
           autoCorrect="off"
           spellCheck={false}

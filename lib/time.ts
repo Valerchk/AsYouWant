@@ -94,3 +94,32 @@ export function weekOf(day: string): string[] {
   const monday = addDays(day, -offset);
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 }
+
+/* --------------------------------------------------------------------------
+   Naming a day
+
+   Lived in DayHeader, which meant the composer could not say which day it was
+   about to add to without either importing from a component or keeping a
+   second copy of the month names.
+   -------------------------------------------------------------------------- */
+
+const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** "Thu 4 Sep" — the same spelling everywhere a date is written out. */
+export function longDate(day: string): string {
+  const [, month, date] = day.split("-").map(Number);
+  return `${WEEKDAY_NAMES[weekdayOf(day)]} ${date} ${MONTH_NAMES[month - 1]}`;
+}
+
+/** "Today", "Tomorrow", "Yesterday", or the date spelled out. */
+export function dayTitle(day: string, today: string): string {
+  const delta = daysBetween(today, day);
+  if (delta === 0) return "Today";
+  if (delta === 1) return "Tomorrow";
+  if (delta === -1) return "Yesterday";
+  return longDate(day);
+}

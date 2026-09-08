@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { layout, type Block } from "@/lib/timeline/engine";
-import { buildGeometry, minuteForY, yForMinute } from "@/lib/timeline/geometry";
+import {
+  buildGeometry,
+  minuteForY,
+  yForMinute,
+  type RibbonDensity,
+} from "@/lib/timeline/geometry";
 import { threadById, type Thread } from "@/lib/threads";
 import { blockLook } from "@/lib/blocks/look";
 import { BlockRow, type DragPreview } from "./BlockRow";
@@ -20,8 +25,12 @@ interface Props {
   nowMin: number;
   dayStartMin: number;
   dayEndMin: number;
-  /** False for any day but today: you cannot start a block on Thursday. */
+  /** False for any day but today. */
   isToday: boolean;
+  /** How much room a minute gets — a preference, honoured here. */
+  density: RibbonDensity;
+  /** Open on now rather than on the morning — the other half of that. */
+  foldPast: boolean;
   onToggleDone: (blockId: string) => void;
   onOpenBlock: (blockId: string) => void;
   /** A stretch of open time was tapped: start a block of this length here. */
@@ -41,6 +50,8 @@ export function Ribbon({
   dayStartMin,
   dayEndMin,
   isToday,
+  density,
+  foldPast,
   onToggleDone,
   onOpenBlock,
   onFillGap,
@@ -49,9 +60,10 @@ export function Ribbon({
   onMoveBlock,
   onReorderBlock,
 }: Props) {
-  // The past is folded by default and expands on demand. Kept here rather than
-  // in geometry so the geometry stays a pure function of the day.
-  const [showPast, setShowPast] = useState(false);
+  // Folded or not according to the preference, and expandable either way.
+  // Kept here rather than in geometry so the geometry stays a pure function
+  // of the day.
+  const [showPast, setShowPast] = useState(!foldPast);
   // Where a dragged block would land. Drawn as a ghost so the gesture answers
   // "where does this go" before you let go of it.
   const [ghost, setGhost] = useState<DragPreview | null>(null);
@@ -66,8 +78,9 @@ export function Ribbon({
       buildGeometry(result, dayStartMin, dayEndMin, {
         nowMin,
         collapsePast: !showPast,
+        density,
       }),
-    [result, dayStartMin, dayEndMin, nowMin, showPast],
+    [result, dayStartMin, dayEndMin, nowMin, showPast, density],
   );
 
   // Slack belongs to the block that released it, so it travels with the block

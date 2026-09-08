@@ -12,14 +12,40 @@
 
 import type { Layout, PlacedBlock } from "./engine";
 
-export const PX_PER_MIN = 1.5;
-/** 44pt is Apple's minimum touch target. 56 leaves room for a second line and
-    keeps short blocks from looking cramped against a light background, where
-    tight spacing reads as stuck-together rather than dense. */
-export const MIN_BLOCK_H = 56;
+/**
+ * How much room a minute is given.
+ *
+ * Two scales, because a day of six blocks and a day of eighteen are not the
+ * same reading problem. Roomy is the default and the one every measurement in
+ * this file was tuned against; compact trades the second line of breathing
+ * room for seeing more of the day at once.
+ *
+ * This is a preference the person sets, and it used to be a preference that
+ * did nothing: Settings wrote `ribbon_density` to the database, read it back
+ * into the form, and no other line of the app ever looked at it.
+ */
+export type RibbonDensity = "comfortable" | "compact";
+
+interface Scale {
+  pxPerMin: number;
+  /** 44pt is Apple's minimum touch target; roomy leaves room for a second
+      line, and keeps short blocks from looking stuck together. */
+  minBlockH: number;
+  collapsedGapH: number;
+}
+
+const SCALE: Record<RibbonDensity, Scale> = {
+  comfortable: { pxPerMin: 1.5, minBlockH: 56, collapsedGapH: 40 },
+  compact: { pxPerMin: 1, minBlockH: 44, collapsedGapH: 32 },
+};
+
+export const DEFAULT_DENSITY: RibbonDensity = "comfortable";
+
+export const PX_PER_MIN = SCALE.comfortable.pxPerMin;
+export const MIN_BLOCK_H = SCALE.comfortable.minBlockH;
+export const COLLAPSED_GAP_H = SCALE.comfortable.collapsedGapH;
 /** Empty stretches longer than this collapse to a labelled strip. */
 export const GAP_COLLAPSE_FROM_MIN = 25;
-export const COLLAPSED_GAP_H = 40;
 export const MIN_GAP_H = 6;
 /** The single row that stands in for everything already over. */
 export const PAST_STRIP_H = 44;
@@ -70,6 +96,8 @@ export interface GeometryOptions {
   nowMin?: number;
   /** Fold everything finished before `nowMin` into a single row. */
   collapsePast?: boolean;
+  /** How much room a minute gets. Defaults to roomy. */
+  density?: RibbonDensity;
 }
 
 /** The minutes a segment stands for — the same question for all three kinds. */
@@ -81,16 +109,19 @@ export function segmentEnd(s: Segment): number {
   return s.type === "block" ? s.placed.endMin : s.endMin;
 }
 
-function blockHeight(minutes: number): number {
-  return Math.max(MIN_BLOCK_H, Math.round(minutes * PX_PER_MIN));
+function blockHeight(minutes: number, scale: Scale): number {
+  return Math.max(scale.minBlockH, Math.round(minutes * scale.pxPerMin));
 }
 
-function gapHeight(minutes: number): { height: number; collapsed: boolean } {
+function gapHeight(
+  minutes: number,
+  scale: Scale,
+): { height: number; collapsed: boolean } {
   if (minutes >= GAP_COLLAPSE_FROM_MIN) {
-    return { height: COLLAPSED_GAP_H, collapsed: true };
+    return { height: scale.collapsedGapH, collapsed: true };
   }
   return {
-    height: Math.max(MIN_GAP_H, Math.round(minutes * PX_PER_MIN)),
+    height: Math.max(MIN_GAP_H, Math.round(minutes * scale.pxPerMin)),
     collapsed: false,
   };
 }
@@ -143,6 +174,7 @@ export function buildGeometry(
   dayEndMin: number,
   options: GeometryOptions = {},
 ): Geometry {
+  const scale = SCALE[options.density ?? DEFAULT_DENSITY];
   const placed = layout.placed;
 
   // The ribbon spans the planned day, widened if anything spills past either
@@ -162,7 +194,7 @@ export function buildGeometry(
   const pushGap = (from: number, to: number) => {
     const minutes = to - from;
     if (minutes <= 0) return;
-    const { height, collapsed } = gapHeight(minutes);
+    const { height, collapsed } = gapHeight(minutes, scale);
     built.push({
       type: "gap",
       key: `gap-${from}-${to}`,
@@ -180,7 +212,7 @@ export function buildGeometry(
     // possible in real data: a running block can overrun into an anchor.
     if (p.startMin > cursor) pushGap(cursor, p.startMin);
 
-    const height = blockHeight(p.endMin - p.startMin);
+    const height = blockHeight(p.endMin - p.startMin, scale);
     built.push({ type: "block", key: p.block.id, placed: p, top, height });
     top += height;
     cursor = Math.max(cursor, p.endMin);

@@ -137,6 +137,13 @@ textarea {
   z-index: 30;
 }
 
+/* Both bars are opaque paper. They asked for `backdrop-blur-sm` for months
+   and never got it: the theme above wipes `--blur-*`, so that utility
+   generates nothing at all. What actually shipped was a slightly transparent
+   bar with the ribbon showing through unblurred — a smudge, not frosted
+   glass. Frosted glass is also the wrong material here. This is paper, and
+   paper is opaque. */
+
 /* The space the fixed tab bar would have taken if it were in the flow. */
 .tabbar-gap {
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));

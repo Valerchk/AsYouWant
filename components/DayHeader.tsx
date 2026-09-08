@@ -1,7 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { formatClock, formatDuration, daysBetween, weekdayOf } from "@/lib/time";
+import {
+  formatClock,
+  formatDuration,
+  daysBetween,
+  dayTitle,
+  longDate,
+} from "@/lib/time";
 import { Icon } from "@/components/icons/Icon";
 import { WeekStrip } from "@/components/WeekStrip";
 import { DayBar } from "@/components/DayBar";
@@ -21,6 +27,8 @@ interface Props {
   freeMin: number;
   blockCount: number;
   overflowCount: number;
+  /** Minutes the day is short by, for the bar's hatched tail. */
+  overflowMin: number;
   /** Things you mean to do today that take no place on the clock. */
   intentionCount: number;
   /** Everything the day holds, for the bar that draws it to scale. */
@@ -32,28 +40,6 @@ interface Props {
   onConfirm: () => void;
   /** Everything that is not the day itself, behind one button. */
   onOpenMenu: () => void;
-}
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** "Today", "Tomorrow", or a date that names itself. */
-function titleFor(date: string, today: string): string {
-  const delta = daysBetween(today, date);
-  if (delta === 0) return "Today";
-  if (delta === 1) return "Tomorrow";
-  if (delta === -1) return "Yesterday";
-  const [, month, day] = date.split("-").map(Number);
-  return `${WEEKDAYS[weekdayOf(date)]} ${day} ${MONTHS[month - 1]}`;
-}
-
-/** The full date, spelled out under the day's name. */
-function longDate(date: string): string {
-  const [, month, day] = date.split("-").map(Number);
-  return `${WEEKDAYS[weekdayOf(date)]} ${day} ${MONTHS[month - 1]}`;
 }
 
 /** The separator between the day's numbers. */
@@ -71,6 +57,7 @@ export function DayHeader({
   freeMin,
   blockCount,
   overflowCount,
+  overflowMin,
   intentionCount,
   placed,
   threads,
@@ -94,7 +81,7 @@ export function DayHeader({
       <div className="mt-3 flex items-start gap-2.5">
         <div className="min-w-0">
           <h1 className="display text-title text-deep">
-            {titleFor(date, today)}
+            {dayTitle(date, today)}
           </h1>
           {/* The clock belongs to today alone. Printing the current time over
               Thursday's plan says something untrue about Thursday, so any
@@ -141,6 +128,7 @@ export function DayHeader({
           dayEndMin={dayEndMin}
           nowMin={nowMin}
           isToday={isToday}
+          overflowMin={overflowMin}
         />
       </div>
 

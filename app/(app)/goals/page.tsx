@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { GoalSheet } from "@/components/GoalSheet";
 import { LoadFailure } from "@/components/LoadFailure";
@@ -64,6 +65,7 @@ export default function Goals() {
 }
 
 function GoalsScreen({ nowMin }: { nowMin: number }) {
+  const router = useRouter();
   const [today] = useState(() => localDay());
   const [span, setSpan] = useState<Span>("week");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -177,6 +179,7 @@ function GoalsScreen({ nowMin }: { nowMin: number }) {
                 share={closed > 0 ? (totals.get(t.id) ?? 0) / closed : 0}
                 days={spend?.days ?? []}
                 onOpen={() => setOpenId(t.id)}
+                onPlan={() => router.push(`/today?goal=${t.id}`)}
               />
             ))}
           </ul>
@@ -255,6 +258,7 @@ function GoalRow({
   share,
   days,
   onOpen,
+  onPlan,
 }: {
   thread: Thread;
   spentMin: number;
@@ -264,6 +268,8 @@ function GoalRow({
   share: number;
   days: Spend["days"];
   onOpen: () => void;
+  /** Take this goal to the day and start writing something for it. */
+  onPlan: () => void;
 }) {
   const colour = threadColor(thread.colorIndex);
   const ratio = targetMin > 0 ? Math.min(1, spentMin / targetMin) : share;
@@ -271,12 +277,17 @@ function GoalRow({
   // Floored at an hour so one ten-minute day does not draw a full column.
   const peak = Math.max(60, ...values);
 
+  // Behind its own promise, with time left in the week to do something about
+  // it. That is the only condition under which this page has any business
+  // asking anything of your day.
+  const behind = targetMin > 0 && spentMin < targetMin;
+
   return (
-    <li className="border-b border-grid">
+    <li className="flex items-start border-b border-grid">
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-start gap-3.5 py-4 text-left"
+        className="flex min-w-0 flex-1 items-start gap-3.5 py-4 text-left"
       >
         <span
           className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-edge"
@@ -340,6 +351,24 @@ function GoalRow({
 
         <Icon name="chevron" size={14} className="mt-1.5 shrink-0 text-faint" />
       </button>
+
+      {/* The loop this page was missing. It could say "Work is four hours
+          short" and then ask nothing of anybody — a scoreboard, which is a
+          page you visit twice and stop visiting. One tap now opens the day
+          with this goal already chosen, and all that is left is to say what
+          and when. A sibling of the row's button rather than inside it,
+          because a button cannot legally contain another. */}
+      {behind && (
+        <button
+          type="button"
+          onClick={onPlan}
+          aria-label={`Plan time for ${thread.name}`}
+          title={`Plan time for ${thread.name}`}
+          className="mt-4 ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-edge text-faint ring-1 ring-rule transition-colors hover:bg-accent-soft hover:text-accent hover:ring-accent/40"
+        >
+          <Icon name="plus" size={15} />
+        </button>
+      )}
     </li>
   );
 }

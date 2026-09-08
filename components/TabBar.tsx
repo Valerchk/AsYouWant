@@ -35,7 +35,7 @@ export function TabBar() {
   const inboxCount = notes.filter((n) => n.doneAt === null).length;
 
   return (
-    <nav className="tabbar safe-bottom border-t border-rule bg-paper/95 backdrop-blur-sm">
+    <nav className="tabbar safe-bottom border-t border-rule bg-paper">
       <div className="mx-auto flex max-w-2xl">
         {TABS.map((tab) => {
           const active = pathname === tab.href;
