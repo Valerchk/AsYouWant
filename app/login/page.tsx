@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { createClient } from "@/lib/supabase/client";
 import { readSignInInput, type OtpType } from "@/lib/auth/signInInput";
+import { useKeyboardSettle } from "@/lib/useKeyboardSettle";
 import { Icon } from "@/components/icons/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -390,6 +391,11 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  /* Two text fields and no tab bar, so nothing here can be left hanging —
+     but the page can still be left scrolled past its own end once a keyboard
+     has closed over it, which reads as content that will not come back. */
+  useKeyboardSettle();
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="safe-top mx-auto flex w-full max-w-4xl items-center justify-between px-6 pt-6">

@@ -1,18 +1,29 @@
+"use client";
+
 import { TabBar } from "@/components/TabBar";
+import { useKeyboardSettle } from "@/lib/useKeyboardSettle";
 
 /* The tabbed shell. Login, the auth callback and the design bench sit outside
    this group, so they get no tab bar.
 
-   No keyboard handling here, and that is the fix rather than an omission. The
-   composer and the tab bar are both plain fixed elements; iOS raises them over
-   its own keyboard, and two successive attempts to measure and correct that
-   from JavaScript each made it worse — see the note in globals.css. */
+   The keyboard hook sits here rather than inside TabBar because this is where
+   its reach is legible: every screen in this group — the day, the inbox, the
+   goals, the review, the settings — has fields, and every one of them has the
+   two fixed bars at the bottom that a stranded scroll leaves hanging. Buried
+   in a component that merely happens to render everywhere, nobody could tell
+   which screens it covered.
+
+   It positions nothing. See lib/useKeyboardSettle for why that restraint is
+   the whole point: two earlier attempts moved the bars themselves and each
+   made things worse. */
 
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  useKeyboardSettle();
+
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="flex-1">{children}</div>
