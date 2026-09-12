@@ -5,7 +5,6 @@ import { toBlock, toThread } from "@/lib/blocks/mapper";
 import { layout } from "@/lib/timeline/engine";
 import { decideNotifications } from "@/lib/notify/decide";
 import { contentHash, sendPush } from "@/lib/notify/send";
-import { LIVE_TAG } from "@/lib/notify/compose";
 import { applyThrottle } from "@/lib/notify/throttle";
 import { dateInZone, minutesInZone } from "@/lib/time";
 
@@ -133,7 +132,6 @@ export async function POST(request: NextRequest) {
           dayEndMin: profile.day_end_min,
           eveningReviewMin: profile.evening_review_min,
           dayConfirmed: profile.day_confirmed_on === today,
-          notifyLive: profile.notify_live,
           notifyLeadMin: profile.notify_lead_min,
           quietFromMin: profile.quiet_from_min,
           quietToMin: profile.quiet_to_min,
@@ -157,13 +155,26 @@ export async function POST(request: NextRequest) {
         (p) => seen.get(p.tag) !== contentHash(p),
       );
 
-      /* Everything except the live card arrives with a sound, so everything
-         except the live card is rationed. */
-      const audible = (states ?? [])
-        .filter((s) => s.tag !== LIVE_TAG)
-        .map((s) => ({ tag: s.tag, sentAt: new Date(s.sent_at).getTime() }));
+      /* The day's allowance. The counter belongs to a date, so a stale one
+         from yesterday counts as nothing spent — the scheduler is the only
+         thing that ever rolls it over, and it does so lazily, here. */
+      const countedToday =
+        profile.notify_sent_on === today ? profile.notify_sent_count : 0;
 
-      const { send, held } = applyThrottle(fresh, audible, now.getTime());
+      const lastSentAt = (states ?? []).reduce<number | null>((latest, s) => {
+        const at = new Date(s.sent_at).getTime();
+        return latest === null || at > latest ? at : latest;
+      }, null);
+
+      const { send, held } = applyThrottle(
+        fresh,
+        {
+          maxPerDay: profile.notify_max_daily,
+          usedToday: countedToday,
+          lastSentAt,
+        },
+        now.getTime(),
+      );
       report.skipped += payloads.length - fresh.length;
       report.held += held.length;
 
@@ -209,6 +220,16 @@ export async function POST(request: NextRequest) {
             },
             { onConflict: "user_id,tag" },
           );
+          // Spend the allowance. Written per send rather than counted from
+          // the log above, which keeps only the latest row per tag and so can
+          // never answer "how many today".
+          await admin
+            .from("profiles")
+            .update({
+              notify_sent_on: today,
+              notify_sent_count: countedToday + 1,
+            })
+            .eq("id", userId);
         }
       }
     } catch (err) {

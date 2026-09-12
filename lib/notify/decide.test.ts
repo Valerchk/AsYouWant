@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { layout, type Block } from "@/lib/timeline/engine";
 import { decideNotifications, currentBlock, type NotifyContext } from "./decide";
-import { LIVE_TAG, RITUAL_TAG } from "./compose";
+import { RITUAL_TAG } from "./compose";
 
 const H = (h: number, m = 0) => h * 60 + m;
 
@@ -47,9 +47,6 @@ const decide = (blocks: Block[], c: NotifyContext) =>
     NO_THREADS,
   );
 
-const byTag = (out: ReturnType<typeof decide>, tag: string) =>
-  out.find((n) => n.tag === tag);
-
 /* -------------------------------------------------------------------------- */
 
 describe("silence", () => {
@@ -65,19 +62,18 @@ describe("consent", () => {
       ctx({ nowMin: H(10, 20), dayConfirmed: false }),
     );
 
+    // The only thing it may say is "confirm it". The app does not run a day
+    // nobody agreed to.
     expect(out).toHaveLength(1);
     expect(out[0].tag).toBe(RITUAL_TAG);
-    // Crucially: no live card, no nudges. The app does not run a day nobody
-    // agreed to.
-    expect(byTag(out, LIVE_TAG)).toBeUndefined();
   });
 
-  it("starts working the moment the day is confirmed", () => {
+  it("stops asking the moment the day is confirmed", () => {
     const out = decide(
       [anchor(H(10), 60)],
       ctx({ nowMin: H(10, 20), dayConfirmed: true }),
     );
-    expect(byTag(out, LIVE_TAG)).toBeDefined();
+    expect(out.some((n) => n.tag === RITUAL_TAG)).toBe(false);
   });
 
   it("offers to plan when an unconfirmed day is empty", () => {
@@ -86,23 +82,12 @@ describe("consent", () => {
   });
 });
 
-describe("the live card", () => {
-  it("tracks a block that is merely scheduled, not started", () => {
-    // Nobody tapped "start" — which is most days — and the card must survive
-    // that, or the headline feature disappears whenever life is normal.
-    const b = anchor(H(10), 60, { title: "Lake walk" });
-    const live = byTag(decide([b], ctx({ nowMin: H(10, 20) })), LIVE_TAG)!;
-
-    // The title is only the block's name — iOS already prefixes the app's, so
-    // a title carrying the countdown as well wrapped onto three lines.
-    expect(live.title).toBe("Lake walk");
-    expect(live.body).toContain("left");
-    expect(live.silent).toBe(true);
-  });
-
-  it("reads the schedule, which is the only thing there is to read", () => {
-    // There is no "started" state to prefer any more. Whatever the plan puts
-    // across this minute is the current block, full stop.
+describe("the block the plan puts you in", () => {
+  it("is whatever the schedule says, which is all there is to read", () => {
+    // There was a self-rewriting card that preferred a "started" block. It
+    // stacked on iOS instead of replacing itself — five of them, five minutes
+    // apart, on a photographed lock screen — so it is gone, along with the
+    // only state that was ever preferred over the schedule.
     const earlier = anchor(H(9), 30, { title: "Earlier" });
     const nowish = anchor(H(10), 60, { title: "Now" });
 
@@ -114,80 +99,9 @@ describe("the live card", () => {
     expect(currentBlock(result, H(10, 10))?.block.title).toBe("Now");
   });
 
-  it("disappears when nothing owns the moment", () => {
-    const out = decide([anchor(H(14), 60)], ctx({ nowMin: H(10) }));
-    expect(byTag(out, LIVE_TAG)).toBeUndefined();
-  });
-
-  it("never names the current block as the next one", () => {
-    // The bug this exists to prevent, seen on a real lock screen:
-    //   "Lake walk"  /  "1h 2m left · next Lake walk at 16:47"
-    // A block starting exactly on the current minute satisfies both "owns
-    // now" and "starts at or after now", so filtering by time alone put the
-    // same block on both lines.
-    const b = anchor(H(10), 60, { title: "Lake walk" });
-    const live = byTag(decide([b], ctx({ nowMin: H(10) })), LIVE_TAG)!;
-
-    expect(live.body).not.toContain("Lake walk");
-    expect(live.body).toContain("last one today");
-  });
-
-  it("names a genuinely different block as next", () => {
-    const now = anchor(H(10), 60, { title: "Lake walk" });
-    const later = anchor(H(12), 30, { title: "Standup" });
-    const live = byTag(decide([now, later], ctx({ nowMin: H(10, 20) })), LIVE_TAG)!;
-
-    expect(live.body).toContain("Standup");
-    expect(live.body).toContain("12:00");
-  });
-
-  it("carries the number of blocks still owed as the badge", () => {
-    const out = decide(
-      [anchor(H(10), 60), anchor(H(13), 30), anchor(H(15), 30)],
-      ctx({ nowMin: H(10, 10) }),
-    );
-    expect(byTag(out, LIVE_TAG)!.appBadge).toBe(3);
-  });
-});
-
-describe("not spamming the lock screen", () => {
-  it("keeps the live card's text identical across a five-minute window", () => {
-    // The scheduler runs every minute. If the copy changed every tick, the
-    // deduplication hash would too, and APNs would carry sixty pushes an hour
-    // for one card.
-    const blocks = [anchor(H(10), 60)];
-    const texts = new Set<string>();
-
-    for (let m = H(10, 10); m < H(10, 15); m += 1) {
-      const live = byTag(decide(blocks, ctx({ nowMin: m })), LIVE_TAG)!;
-      texts.add(`${live.title}|${live.body}`);
-    }
-
-    expect(texts.size).toBe(1);
-  });
-
-  it("rewrites the card at most twelve times an hour", () => {
-    // The real contract with APNs. One long block, ticked every minute for a
-    // full hour: the number of distinct payloads is what actually gets sent.
-    const blocks = [anchor(H(9), 180)];
-    const texts = new Set<string>();
-
-    for (let m = H(10); m < H(11); m += 1) {
-      const live = byTag(decide(blocks, ctx({ nowMin: m })), LIVE_TAG)!;
-      texts.add(`${live.title}|${live.body}`);
-    }
-
-    expect(texts.size).toBe(12);
-  });
-
-  it("does change the card as the block genuinely burns down", () => {
-    const blocks = [anchor(H(10), 60)];
-    const early = byTag(decide(blocks, ctx({ nowMin: H(10, 5) })), LIVE_TAG)!;
-    const late = byTag(decide(blocks, ctx({ nowMin: H(10, 40) })), LIVE_TAG)!;
-
-    // The name is constant; the countdown lives in the body.
-    expect(early.title).toBe(late.title);
-    expect(early.body).not.toBe(late.body);
+  it("no longer puts a card on the lock screen for merely existing", () => {
+    const out = decide([anchor(H(10), 60)], ctx({ nowMin: H(10, 20) }));
+    expect(out).toEqual([]);
   });
 });
 

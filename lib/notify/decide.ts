@@ -10,7 +10,6 @@
 import type { Layout, PlacedBlock } from "@/lib/timeline/engine";
 import {
   composeEvening,
-  composeLive,
   composeMissed,
   composeMorning,
   composeStartingSoon,
@@ -28,8 +27,6 @@ export interface NotifyContext {
 
   /* Preferences. Defaults match what used to be hard-coded, so an account
      that has never opened Settings behaves exactly as before. */
-  /** The self-updating lock-screen card. */
-  notifyLive?: boolean;
   /** Minutes before something fixed begins to speak up. 0 disables it. */
   notifyLeadMin?: number;
   /** Nothing is sent between these, whatever else is true. */
@@ -59,20 +56,6 @@ function inQuietHours(
 /** How long a missed anchor stays worth mentioning. */
 const MISSED_WINDOW_MIN = 20;
 
-/* The live card's countdown is computed from a clock quantised to this step,
-   so its text — and therefore its content hash — changes twelve times an hour
-   instead of sixty.
-
-   Note it is *now* that gets quantised, not the remaining minutes. Rounding a
-   continuously shrinking remainder still changes on its own schedule, which
-   can land a boundary in the middle of any given five-minute window; pinning
-   it to an absolute grid makes the card settle between grid lines exactly. */
-const COUNTDOWN_STEP_MIN = 5;
-
-function gridNow(nowMin: number): number {
-  return Math.floor(nowMin / COUNTDOWN_STEP_MIN) * COUNTDOWN_STEP_MIN;
-}
-
 /**
  * The block the plan puts you in right now.
  *
@@ -101,7 +84,6 @@ export function decideNotifications(
 ): NotificationPayload[] {
   const { nowMin, dayStartMin, eveningReviewMin, dayConfirmed } = ctx;
   const leadMin = ctx.notifyLeadMin ?? STARTING_SOON_MIN;
-  const wantsLive = ctx.notifyLive ?? true;
   const needsConfirm = ctx.requireConfirm ?? true;
 
   // Outside waking hours the app says nothing at all.
@@ -122,14 +104,6 @@ export function decideNotifications(
   }
 
   const out: NotificationPayload[] = [];
-  const current = currentBlock(layout, nowMin);
-
-  if (current && wantsLive) {
-    const settled = gridNow(nowMin);
-    out.push(
-      composeLive(current, layout, nowMin, Math.max(0, current.endMin - settled)),
-    );
-  }
 
   /* Something fixed about to begin. Anchors only: a flow block's start is an
      estimate the ribbon revises the moment anything above it moves, and a

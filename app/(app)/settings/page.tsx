@@ -22,7 +22,7 @@ interface Prefs {
   requireConfirm: boolean;
   ribbonDensity: "compact" | "comfortable";
   collapsePast: boolean;
-  notifyLive: boolean;
+  notifyMaxDaily: number;
   notifyLeadMin: number;
   quietFromMin: number | null;
   quietToMin: number | null;
@@ -62,7 +62,7 @@ export default function Settings() {
           requireConfirm: data.require_confirm,
           ribbonDensity: data.ribbon_density,
           collapsePast: data.collapse_past,
-          notifyLive: data.notify_live,
+          notifyMaxDaily: data.notify_max_daily,
           notifyLeadMin: data.notify_lead_min,
           quietFromMin: data.quiet_from_min,
           quietToMin: data.quiet_to_min,
@@ -90,7 +90,9 @@ export default function Settings() {
     }
     if (next.ribbonDensity !== undefined) row.ribbon_density = next.ribbonDensity;
     if (next.collapsePast !== undefined) row.collapse_past = next.collapsePast;
-    if (next.notifyLive !== undefined) row.notify_live = next.notifyLive;
+    if (next.notifyMaxDaily !== undefined) {
+      row.notify_max_daily = next.notifyMaxDaily;
+    }
     if (next.notifyLeadMin !== undefined) row.notify_lead_min = next.notifyLeadMin;
     if (next.quietFromMin !== undefined) row.quiet_from_min = next.quietFromMin;
     if (next.quietToMin !== undefined) row.quiet_to_min = next.quietToMin;
@@ -185,12 +187,19 @@ export default function Settings() {
 
       <Group title="What it says">
         <Row
-          label="Live card"
-          hint="One notification that rewrites itself as the day moves."
+          label="At most a day"
+          hint="Counting everything. Three is the morning, the one thing that mattered, and the evening — and never two inside ninety minutes."
         >
-          <Switch
-            on={prefs.notifyLive}
-            onChange={(v) => patch({ notifyLive: v })}
+          <Choice
+            options={[
+              { value: "0", label: "Off" },
+              { value: "1", label: "1" },
+              { value: "2", label: "2" },
+              { value: "3", label: "3" },
+              { value: "5", label: "5" },
+            ]}
+            value={String(prefs.notifyMaxDaily)}
+            onChange={(v) => patch({ notifyMaxDaily: Number(v) })}
           />
         </Row>
         <Row label="Warn before a block ends">

@@ -1,79 +1,91 @@
 import { describe, it, expect } from "vitest";
-import { applyThrottle, mayInterrupt, GAP_MIN, HOURLY_CAP } from "./throttle";
+import {
+  applyThrottle,
+  mayInterrupt,
+  GAP_MIN,
+  DEFAULT_MAX_PER_DAY,
+  type Budget,
+} from "./throttle";
 
-const MIN = 60_000;
-const NOW = 1_800_000_000_000;
-const agoMin = (m: number) => ({ tag: "x", sentAt: NOW - m * MIN });
+const NOW = Date.UTC(2026, 8, 12, 12, 0, 0);
+const agoMin = (m: number) => NOW - m * 60_000;
 
-describe("how often the app may buzz", () => {
-  it("keeps ten clear minutes between two buzzes", () => {
-    // The number the person asked for, pinned so it cannot drift back down
-    // in a later refactor: two notifications inside ten minutes read as the
-    // app losing its composure, however reasonable each one was alone.
-    expect(GAP_MIN).toBe(10);
-    expect(mayInterrupt([agoMin(9)], NOW)).toBe(false);
-    expect(mayInterrupt([agoMin(11)], NOW)).toBe(true);
+const budget = (over: Partial<Budget> = {}): Budget => ({
+  maxPerDay: DEFAULT_MAX_PER_DAY,
+  usedToday: 0,
+  lastSentAt: null,
+  ...over,
+});
+
+describe("the day's allowance", () => {
+  it("is three, which is what the person asked for", () => {
+    expect(DEFAULT_MAX_PER_DAY).toBe(3);
   });
 
-  it("allows the first interruption", () => {
-    expect(mayInterrupt([], NOW)).toBe(true);
+  it("keeps an hour and a half between two notifications", () => {
+    // Ninety minutes came from a photographed lock screen, not a calculation:
+    // four cards inside one hour was the old rule working as written.
+    expect(GAP_MIN).toBe(90);
+    expect(mayInterrupt(budget({ lastSentAt: agoMin(89) }), NOW)).toBe(false);
+    expect(mayInterrupt(budget({ lastSentAt: agoMin(91) }), NOW)).toBe(true);
   });
 
-  it("refuses a second one inside the gap", () => {
-    // The reported symptom: four alerts in five minutes.
-    expect(mayInterrupt([agoMin(1)], NOW)).toBe(false);
-    expect(mayInterrupt([agoMin(GAP_MIN - 1)], NOW)).toBe(false);
+  it("allows the first one of the day whatever the clock says", () => {
+    expect(mayInterrupt(budget(), NOW)).toBe(true);
   });
 
-  it("allows one once the gap has passed", () => {
-    expect(mayInterrupt([agoMin(GAP_MIN + 1)], NOW)).toBe(true);
+  it("stops at the allowance however well spaced", () => {
+    const spent = budget({ usedToday: 3, lastSentAt: agoMin(600) });
+    expect(mayInterrupt(spent, NOW)).toBe(false);
   });
 
-  it("stops at the hourly cap however well spaced", () => {
-    const spaced = Array.from({ length: HOURLY_CAP }, (_, i) =>
-      agoMin(10 + i * 10),
-    );
-    expect(mayInterrupt(spaced, NOW)).toBe(false);
+  it("says nothing at all when the allowance is zero", () => {
+    expect(mayInterrupt(budget({ maxPerDay: 0 }), NOW)).toBe(false);
   });
 
-  it("forgets what happened more than an hour ago", () => {
-    const old = Array.from({ length: HOURLY_CAP }, (_, i) => agoMin(61 + i));
-    expect(mayInterrupt(old, NOW)).toBe(true);
+  it("honours an allowance the person raised", () => {
+    const five = budget({ maxPerDay: 5, usedToday: 3, lastSentAt: agoMin(200) });
+    expect(mayInterrupt(five, NOW)).toBe(true);
   });
 
-  it("treats a record from the future as just-sent rather than as licence", () => {
-    expect(mayInterrupt([{ tag: "x", sentAt: NOW + 5 * MIN }], NOW)).toBe(false);
+  it("treats a timestamp from the future as just-sent, not as licence", () => {
+    expect(mayInterrupt(budget({ lastSentAt: NOW + 60_000 }), NOW)).toBe(false);
   });
 });
 
 describe("splitting a tick's payloads", () => {
-  const loud = (tag: string) => ({ tag, silent: false });
-  const quiet = { tag: "live", silent: true };
-
-  it("never holds the silent card back", () => {
-    const { send, held } = applyThrottle([quiet], [agoMin(0)], NOW);
-    expect(send).toEqual([quiet]);
-    expect(held).toEqual([]);
+  it("releases one and holds the rest, however much room there is", () => {
+    // Three true things at once is still one buzz and two you never read.
+    const { send, held } = applyThrottle(["a", "b", "c"], budget(), NOW);
+    expect(send).toEqual(["a"]);
+    expect(held).toEqual(["b", "c"]);
   });
 
-  it("releases one audible notification per tick, not three", () => {
+  it("holds everything while inside the gap", () => {
     const { send, held } = applyThrottle(
-      [quiet, loud("a"), loud("b"), loud("c")],
-      [],
+      ["a", "b"],
+      budget({ lastSentAt: agoMin(10) }),
       NOW,
     );
-    expect(send).toHaveLength(2);
-    expect(send).toContain(quiet);
-    expect(held.map((p) => p.tag)).toEqual(["b", "c"]);
+    expect(send).toEqual([]);
+    expect(held).toEqual(["a", "b"]);
   });
 
-  it("holds everything audible while inside the gap", () => {
+  it("holds everything once the day is spent", () => {
     const { send, held } = applyThrottle(
-      [quiet, loud("a")],
-      [agoMin(1)],
+      ["a"],
+      budget({ usedToday: 3, lastSentAt: agoMin(500) }),
       NOW,
     );
-    expect(send).toEqual([quiet]);
-    expect(held.map((p) => p.tag)).toEqual(["a"]);
+    expect(send).toEqual([]);
+    expect(held).toEqual(["a"]);
+  });
+
+  it("never drops what it holds — a later tick offers it again", () => {
+    const first = applyThrottle(["a", "b"], budget({ lastSentAt: agoMin(10) }), NOW);
+    expect(first.held).toHaveLength(2);
+
+    const later = applyThrottle(first.held, budget({ lastSentAt: agoMin(120) }), NOW);
+    expect(later.send).toEqual(["a"]);
   });
 });

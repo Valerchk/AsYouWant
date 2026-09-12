@@ -30,6 +30,10 @@ type ProfileRow = {
      was hard-coded before them, so an untouched account is unchanged. */
   ribbon_density: "compact" | "comfortable";
   collapse_past: boolean;
+  /** Dead since migration 0007: the self-rewriting card stacked on iOS
+      instead of replacing itself, so it no longer exists. The column stays
+      because dropping it buys nothing and 0007 reads it once, to pick a
+      sensible allowance for accounts that had turned the card off. */
   notify_live: boolean;
   notify_lead_min: number;
   quiet_from_min: number | null;
@@ -37,6 +41,12 @@ type ProfileRow = {
   require_confirm: boolean;
   /** A read-only ICS subscription (migration 0004). Never written back to. */
   calendar_url: string | null;
+  /* The day's allowance and what it has spent (migration 0007). The counter
+     belongs to `notify_sent_on`; the scheduler resets it when that date is no
+     longer today in the person's own timezone. */
+  notify_max_daily: number;
+  notify_sent_on: string | null;
+  notify_sent_count: number;
 }
 
 type ThreadRow = {

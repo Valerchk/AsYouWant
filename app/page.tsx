@@ -145,22 +145,22 @@ export default function Landing() {
 
         <Rule />
 
-        {/* ---- the live card --------------------------------------------- */}
+        {/* ---- what it is allowed to say ---------------------------------- */}
         <section className="grid gap-10 md:grid-cols-[1.1fr_1fr] md:items-center md:gap-16">
           <div>
             <div className="mb-3 flex items-center gap-2 text-accent">
               <Icon name="bell" size={17} />
-              <h2 className="text-lede text-deep">One card, not a stream</h2>
+              <h2 className="text-lede text-deep">Three a day, at most</h2>
             </div>
             <p className="text-base leading-7 text-ink">
-              A single notification stays on your lock screen and quietly
-              rewrites itself as the day moves. It never stacks, never piles up,
-              and never asks for anything.
+              A planner that speaks whenever it has something true to say ends
+              up saying fifty things a day, and gets switched off in a week.
+              This one gets a small allowance and has to choose.
             </p>
             <p className="mt-4 text-base leading-7 text-faint">
-              It speaks up out loud only when something is about to begin, a
-              meeting came and went, or the day is closing — and never twice
-              inside ten minutes.
+              Three by default, never two inside ninety minutes, and you set
+              the number. Roughly: the morning, the one thing that mattered,
+              and the evening.
             </p>
           </div>
 
@@ -172,11 +172,9 @@ export default function Landing() {
                   <span className="block h-3.5 w-[3px] bg-paper" />
                 </div>
                 <div className="min-w-0">
-                  <div className="num text-fine text-deep">
-                    Deep work · 25m left
-                  </div>
+                  <div className="num text-fine text-deep">Standup</div>
                   <div className="mt-1 text-fine text-faint">
-                    then Standup 11:00
+                    Starts at 11:00, in 10m.
                   </div>
                 </div>
                 <span className="num ml-auto shrink-0 text-micro text-faint">

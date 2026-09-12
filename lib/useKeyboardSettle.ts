@@ -29,6 +29,13 @@ import { useEffect } from "react";
    measured offsets, no CSS variables: this file can only ever ask the browser
    to settle where it already is. If the diagnosis is wrong it does nothing,
    which is the property the previous two attempts lacked.
+
+   One wrinkle, and it is why this worked on the day and not on the inbox: a
+   page that cannot scroll cannot be asked to move. The ribbon makes the day
+   tall enough to have somewhere to go; an inbox holding two notes, or a goals
+   list holding one, does not. So where there is nothing to scroll the page is
+   lent a single pixel of height for the length of one synchronous block —
+   long enough to scroll across and back, too short to paint.
    ========================================================================== */
 
 /** Under this, the keyboard is gone rather than merely smaller. */
@@ -71,9 +78,12 @@ export function useKeyboardSettle(): void {
     let timers: ReturnType<typeof setTimeout>[] = [];
 
     const reconcile = () => {
+      const doc = (document.scrollingElement ??
+        document.documentElement) as HTMLElement;
+
       const target = restingScrollTop(
         window.scrollY,
-        document.documentElement.scrollHeight,
+        doc.scrollHeight,
         window.innerHeight,
       );
 
@@ -81,12 +91,22 @@ export function useKeyboardSettle(): void {
          claims to hold is optimised away by every browser, and being asked to
          move is exactly what the stale layer needs. One pixel, in whichever
          direction there is room for. */
-      window.scrollTo(0, target === 0 ? 1 : target - 1);
-      window.scrollTo(0, target);
+      if (doc.scrollHeight - window.innerHeight > 0) {
+        window.scrollTo(0, target === 0 ? 1 : target - 1);
+        window.scrollTo(0, target);
+        return;
+      }
 
-      // Reading a layout property forces the synchronous reflow that a page
-      // too short to scroll cannot get from the two lines above.
-      void document.documentElement.offsetHeight;
+      /* Nothing to scroll, so nothing to ask for — which is exactly why the
+         day was fixed and the inbox was not. Lend the page a pixel, spend it,
+         and give it back, all before the browser has a chance to paint. */
+      const held = doc.style.minHeight;
+      doc.style.minHeight = `${Math.ceil(window.innerHeight) + 1}px`;
+      // Forces the layout that makes the borrowed pixel real.
+      void doc.scrollHeight;
+      window.scrollTo(0, 1);
+      window.scrollTo(0, 0);
+      doc.style.minHeight = held;
     };
 
     const settle = () => {
